@@ -1,14 +1,16 @@
 import express from "express";
-
+import{z} from "zod"
+import jwt from "jsonwebtoken"
+import cookieParser  from "cookie-parser"
 const app = express();
 app.use(express.json());
-
+app.use(cookieParser());
 const users = [{
     userId: 1,
     username: "harkirat",
     password: 123123,
     collateral: {
-         availabe: 2000,
+         available: 2000,
          locked: 1000
     },
      positions: [
@@ -25,7 +27,7 @@ const users = [{
     username: "raman",
     password: 123123,
     collateral: {
-         availabe: 2000,
+         available: 2000,
          locked: 2000
     },
     positions: [
@@ -76,8 +78,103 @@ const fills = [{
     short: 1
 }];
 
-app.post("/signup", (req, res) => {})
-app.post("/signin", (req, res) => {})
+type Fill = typeof fills[0];
+
+type User = typeof users[0];
+
+type Position = typeof users[0]["positions"][0];
+type Orders = typeof users[0]["orders"][0];
+
+
+const signUpSchema = z.object({
+    username:z.string().min(4).max(25),
+    password:z.number()
+})
+
+
+app.post("/signup", async (req, res) => {
+
+    const parsedResponse = await signUpSchema.safeParseAsync(req.body);
+    if(!parsedResponse.success){
+        return res.status(400).json({message:"validation error", error:parsedResponse.error})
+    }
+
+    const { username, password } = parsedResponse.data;
+
+    const userFound = users.filter((user)=>user.username === username);
+    if(userFound.length != 0) {
+        return res.status(401).send({message:"username taken", error:"duplicate"});
+    }
+
+    //create the user
+    const userId = Math.random()*1000000
+    const newUser:User  = {
+        userId,
+        username,
+        password,
+        collateral:{
+            available:0,
+            locked:0
+        },
+        orders:[],
+        positions:[]
+        
+    } 
+    users.push(newUser);
+    return res.status(201).send({message:"user created", userId})
+})
+
+
+function AuthMiddleWare(req:express.Request,res:express.Response,next:express.NextFunction){
+
+    const token =  req.cookies.get("Authorization");
+    if(token === undefined) return res.status(400).json({message:"cookie not found"});
+    const passcode = process.env.JWT_PASS;
+    if(passcode === undefined) {
+        console.log("env not loaded");
+        return res.status(500).json({"message":"env not found error"});
+    }
+
+    try {
+        const tokenData = jwt.verify(token,passcode);
+        console.log("token data",tokenData);
+        req.body.username = tokenData;
+        next();      
+        
+    } catch (error) {
+
+        console.log("error on authentication",error);
+        
+        return res.status(400).json({message:"error on authorization",error});
+        
+    }
+}
+app.post("/signin", (req, res) => {
+
+    const parsedData =  signUpSchema.safeParse(req.body);
+
+    if(!parsedData.success){
+        return res.status(400).json({
+            message: "validation error",
+            error: parsedData.error
+        })
+    }
+
+    const {username, password } = parsedData.data;
+
+    const user = users.filter((user)=>user.username===username && user.password === password);
+
+    if(user.length === 0 ) return res.status(400).send({message:"please check your password and username"});
+
+    //cerate token
+    const passCode = process.env.JWT_PASS;
+    if(passCode === undefined) { console.log(" env are not loaded")
+        return res.status(500).send({message:"internal server error"});
+    }
+    const token = jwt.sign({username},passCode,{expiresIn:"1d"});
+
+    return res.status(200).cookie("Authorization",token).json({message:"successfull"});
+})
 app.post("/onramp", (req, res) => {})
 app.post("/order", (req, res) => {})
 app.delete("/order", (req, res) => {})
