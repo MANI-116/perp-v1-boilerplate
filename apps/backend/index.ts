@@ -1,133 +1,145 @@
-import express from "express";
-import{z} from "zod"
-import jwt from "jsonwebtoken"
+import express, {type Request} from "express";
+import{z, ZodError} from "zod"
+import jwt,{type JwtPayload} from "jsonwebtoken"
 import cookieParser  from "cookie-parser"
+import { User} from "@repo/types"
+import { engineManager } from "../engine/index.ts";
+import { ResponseManager} from "./util.ts"
+
+
+const responseManager = await ResponseManager.create()
+interface CustomJwtResponse extends JwtPayload{
+    userId:string
+
+}
+interface AuthRequest extends Request{
+     userId ?:string;
+}
 const app = express();
 app.use(express.json());
 app.use(cookieParser());
-const users = [{
-    userId: 1,
-    username: "harkirat",
-    password: 123123,
-    collateral: {
-         available: 2000,
-         locked: 1000
-    },
-     positions: [
-        { market: "SOL", type: "LONG", qty: 10, margin: 500, liquidationPrice: 80, averagePrice: 90 },
-        { market: "ETH", type: "SHORT", qty: 1, margin: 500, liquidationPrice: 2000, averagePrice: 1900 }
-    ],
-    orders: [
-        { orderId: 1, market: "SOL", type: "LONG", qty: 10, margin: 500, orderType: "limit", price: 90, status: "filled" },
-        { orderId: 2, market: "ETH", type: "SHORT", qty: 10, margin: 500, orderType: "limit", price: 1900, status: "filled" },
-        { orderId: 3, market: "BTC", type: "LONG", qty: 10, margin: 500, orderType: "limit", price: 1900, status: "cancelled" },
-    ]
-}, {
-    userId: 2,
-    username: "raman",
-    password: 123123,
-    collateral: {
-         available: 2000,
-         locked: 2000
-    },
-    positions: [
-        { market: "SOL", type: "SHORT", qty: 10,  margin: 1000, liquidationPrice: 80, pnL: 200, averagePrice: 90 },
-        { market: "ETH", type: "LONG", qty: 1, margin: 1000, liquidationPrice: 2000, pnL: -100, averagePrice: 1900 }
-    ],
-    orders: [
-        { orderId: 10, market: "SOL", type: "SHORT", qty: 10, margin: 500, orderType: "market", price: 90, status: "filled" },
-        { orderId: 11, market: "ETH", type: "LONG", qty: 10, margin: 500, orderType: "market", price: 1900, status: "filled" },
-        { orderId: 12, market: "ZEC", type: "LONG", qty: 10, margin: 500, orderType: "limit", price: 1900, status: "open" },
-    ]
-}];
 
-type Bid = {
-    availableQty: number,
-    openOrders: { userId: number, qty: number, filledQty: number, orderId: number, createdAt: Date }[]
+ function generateId(){
+    const id = `ord-${Date.now() + Math.random()*1e6}`;
+    return id;
 }
 
-type Orderbook = {
-    bids: Record<string, Bid>,
-    asks: Record<string, Bid>,
-    lastTradedPrice: number,
-    indexPrice: number
+interface TempUser {
+    password:string,
+    username:string,
+    userId:string
 }
+const users:TempUser[] = [];
 
-type Orderbooks = Record<string, Orderbook>
+const TypeSchema = z.enum(["LIMIT","MARKET"]);
+const SideSchema = z.enum(["SHORT",'LONG'])
+const CreateOrderSchema = z.object({
+        type:TypeSchema,
+        marketId:z.string().min(4),
+        side:SideSchema,
+        leverage:z.string().regex(/^\d+$/),
+        qty:z.string().regex(/^\d+$/),
+        price:z.string().regex(/^\d+$/),
+        userId:z.string().min(1)
 
-const orderbooks: Orderbooks = {
-     SOL: { bids: {}, asks: {}, lastTradedPrice: 90, indexPrice: 90.01 },
-     ETH: { bids: {}, asks: {}, lastTradedPrice: 1900, indexPrice: 1899.9 }
-}
-
-const fills = [{
-    maker: 1,
-    taker: 2,
-    market: "SOL",
-    qty: 10,
-    price: 90,
-    long: 1,
-    short: 2
-}, {
-    maker: 1,
-    taker: 2,
-    market: "ETH",
-    qty: 1,
-    price: 1900,
-    long: 2,
-    short: 1
-}];
-
-type Fill = typeof fills[0];
-
-type User = typeof users[0];
-
-type Position = typeof users[0]["positions"][0];
-type Orders = typeof users[0]["orders"][0];
-
+})
 
 const signUpSchema = z.object({
     username:z.string().min(4).max(25),
-    password:z.number()
+    password:z.string().min(6).max(30)
 })
 
 
 app.post("/signup", async (req, res) => {
-
+    console.log("user signup");
     const parsedResponse = await signUpSchema.safeParseAsync(req.body);
     if(!parsedResponse.success){
         return res.status(400).json({message:"validation error", error:parsedResponse.error})
     }
-
+    
     const { username, password } = parsedResponse.data;
-
+    
     const userFound = users.filter((user)=>user.username === username);
     if(userFound.length != 0) {
         return res.status(401).send({message:"username taken", error:"duplicate"});
     }
-
+    
     //create the user
-    const userId = Math.random()*1000000
-    const newUser:User  = {
-        userId,
-        username,
-        password,
-        collateral:{
-            available:0,
-            locked:0
-        },
-        orders:[],
-        positions:[]
-        
-    } 
+    const userId = generateId();
+    const newUser:TempUser  = {userId,username,password}
     users.push(newUser);
     return res.status(201).send({message:"user created", userId})
 })
 
 
-function AuthMiddleWare(req:express.Request,res:express.Response,next:express.NextFunction){
+app.post("/signin", (req, res) => {
+    
+    const parsedData =  signUpSchema.safeParse(req.body);
+    
+    if(!parsedData.success){
+        return res.status(400).json({
+            message: "validation error",
+            error: parsedData.error
+        })
+    }
+    
+    const {username, password } = parsedData.data;
+    
+    const user = users.filter((user)=>user.username===username && user.password === password)[0];
+    
+    if(user === undefined ) return res.status(400).send({message:"please check your password and username"});
+    
+    //cerate token
+    const passCode = process.env.JWT_PASS;
+    if(passCode === undefined) { console.log(" env are not loaded")
+        return res.status(500).send({message:"internal server error"});
+}
+const token = jwt.sign({userId:user.userId},passCode,{expiresIn:"1d"});
 
-    const token =  req.cookies.get("Authorization");
+return res.status(200).cookie("Authorization",token).json({message:"successfull"});
+})
+app.post("/onramp", AuthMiddleWare,(req:AuthRequest, res) => {
+    console.log("ramping the users balance");
+    
+})
+app.post("/order", async (req, res) => {
+    try {
+        
+        // const userId = req.userId;
+        // if(!userId) return  res.send("no user found");
+        const payload = CreateOrderSchema.parse(req.body);
+        const corelationId = generateId();
+        const response = await responseManager.putRequest({payload:JSON.stringify({...payload}),payloadType:"createOrder",corelationId})
+        
+        return res.json({...response})
+        
+    } catch (error) {
+        if( error instanceof ZodError){
+            console.log("invalid user payload");
+            return res.status(403).json(error)
+        }
+        return res.status(500).send("internal server error");
+        
+    }
+})
+app.delete("/order", (req, res) => {
+    
+})
+app.get("/equity/available", (req, res) => {})
+app.get("/positions/open/:marketId", (req, res) => {});
+app.get("/positions/closed/:marketId", (req, res) => {});
+app.get("/orders/open/:marketId", (req, res) => {})
+app.get("/orders/:marketId", (req, res) => {})
+app.get("/fills", (req, res) => {});
+
+
+app.listen(process.env.PORT,()=>{
+    console.log(`server is running on the port-${process.env.PORT}`);
+})
+
+function AuthMiddleWare(req:AuthRequest,res:express.Response,next:express.NextFunction){
+
+    const token =  req.cookies.Authorization;
     if(token === undefined) return res.status(400).json({message:"cookie not found"});
     const passcode = process.env.JWT_PASS;
     if(passcode === undefined) {
@@ -136,9 +148,10 @@ function AuthMiddleWare(req:express.Request,res:express.Response,next:express.Ne
     }
 
     try {
-        const tokenData = jwt.verify(token,passcode);
+        const tokenData = jwt.verify(token,passcode) as CustomJwtResponse;
+        if(typeof tokenData === "string"){ throw new Error("expected customJwt but got string")}
         console.log("token data",tokenData);
-        req.body.username = tokenData;
+        req.userId= tokenData.userId;
         next();      
         
     } catch (error) {
@@ -148,48 +161,4 @@ function AuthMiddleWare(req:express.Request,res:express.Response,next:express.Ne
         return res.status(400).json({message:"error on authorization",error});
         
     }
-}
-app.post("/signin", (req, res) => {
-
-    const parsedData =  signUpSchema.safeParse(req.body);
-
-    if(!parsedData.success){
-        return res.status(400).json({
-            message: "validation error",
-            error: parsedData.error
-        })
-    }
-
-    const {username, password } = parsedData.data;
-
-    const user = users.filter((user)=>user.username===username && user.password === password);
-
-    if(user.length === 0 ) return res.status(400).send({message:"please check your password and username"});
-
-    //cerate token
-    const passCode = process.env.JWT_PASS;
-    if(passCode === undefined) { console.log(" env are not loaded")
-        return res.status(500).send({message:"internal server error"});
-    }
-    const token = jwt.sign({username},passCode,{expiresIn:"1d"});
-
-    return res.status(200).cookie("Authorization",token).json({message:"successfull"});
-})
-app.post("/onramp", (req, res) => {})
-app.post("/order", (req, res) => {})
-app.delete("/order", (req, res) => {})
-app.get("/equity/available", (req, res) => {})
-app.get("/positions/open/:marketId", (req, res) => {});
-app.get("/positions/closed/:marketId", (req, res) => {});
-app.get("/orders/open/:marketId", (req, res) => {})
-app.get("/orders/:marketId", (req, res) => {})
-app.get("/fills", (req, res) => {});
-
-async function liqudationChecks(asset: string, price: number) {
-
-}
-
-
-async function onPriceUpdateFromBinance(asset: string, price: number) {
-    liqudationChecks(asset, price);   
 }

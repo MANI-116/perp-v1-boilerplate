@@ -1,7 +1,4 @@
- function generateId(){
-    const id = `ord-${Date.now() + Math.random()*1e6}`;
-    return id;
-}
+import  { generateId } from"../util"
 
 export interface PayloadOrder{
     type:"MARKET"|"LIMIT",

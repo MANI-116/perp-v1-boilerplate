@@ -8,6 +8,10 @@
     "@types/cookie-parser": "^1.4.10",
     "@types/jsonwebtoken": "^9.0.10"
   },
+  "workspaces":[
+    "apps/*",
+    "packages/*"
+  ],
   "peerDependencies": {
     "typescript": "^5"
   },
