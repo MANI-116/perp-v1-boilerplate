@@ -107,12 +107,17 @@ export function updatePositions(position:Position,order:Order,qty:bigint,user:Us
     
 }
 
-
+interface TransactResponse {
+        matchedOrder:{
+            direction:"1"|"-1",
+            transactAmount:string
+        },
+        order:{
+              direction:"1"|"-1",
+            transactAmount:string
+        }
+    }
 export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,orderBook:OrderBook,qty:bigint,market:Market,fills:Fill[]){
-
-    const buyFill = new Fill(bidOrder.userId, bidOrder.qty, bidOrder.price,bidOrder.orderId);
-    const askerFill = new Fill(askOrder.userId, askOrder.qty, askOrder.price,askOrder.orderId);
-   
 
      let sellerPosition = asker.positions.filter((p)=>p.market.marketId === askOrder.assetId)[0];
      
@@ -126,7 +131,7 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
      }else{
        updatePositions(sellerPosition,askOrder,qty,asker,orderBook);
      }
-
+     
      let bidPosition = bidder.positions.filter((p)=>p.market.marketId === askOrder.assetId)[0];
 
      if(bidPosition === undefined){
@@ -138,9 +143,6 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
      }else{
         updatePositions(bidPosition,bidOrder,qty,bidder,orderBook)
      }
-    
-    fills.push(buyFill);
-    fills.push(askerFill);
     
     //position is filled completely -> then remove postion from the user and set its status to completed
     if(sellerPosition.qty === 0n){
@@ -169,5 +171,6 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
         bidPosition.setLiquidationPrice();
         bidPosition.side === "SHORT" ? orderBook.addShort(bidPosition):orderBook.addLong(bidPosition);
     }
+  
     return;
 }

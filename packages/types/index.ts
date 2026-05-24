@@ -1,4 +1,6 @@
- function generateId(){
+
+
+function generateId(){
     const id = `ord-${Date.now() + Math.random()*1e6}`;
     return id;
 }
@@ -10,7 +12,8 @@ export interface PayloadOrder{
     side:OrderSide,
     leverage:bigint,
     qty:bigint,
-    price:bigint
+    price:bigint,
+    orderId:string
 }
 
 export class Fill{
@@ -700,3 +703,4 @@ removeBuyOrder(order:Order){
 
 
 
+export  * from "./structures/engineEvents.ts"

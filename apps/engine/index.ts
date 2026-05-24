@@ -1,4 +1,4 @@
-import {OrderBook , Order, type OrderSide ,Position,type Market, User, Fill, type PayloadOrder, PriceLevelObject} from "@repo/types"
+import {OrderBook , Order,type Market, User, Fill, type PayloadOrder,type EngineResponse} from "@repo/types"
 import { matchOrder } from "./commons/limitOrder";
 import { marketOrder } from "./commons/market";
 import { calculateEstimatedPrice } from "./commons/common";
@@ -74,46 +74,49 @@ function generateId(){
     const id = `ord-${Date.now() + Math.random()*1e6}`;
     return id;
 }
-export function engineManager(request:any){
+export function engineManager(request:any):EngineResponse{
 
     request.payload = JSON.parse(request.payload);
     console.log("message from the sreams-",request);
 
-    switch(request.payloadType){
-        case "createOrder":{
-            console.log("create order is invoked");
-          const payload = { ...request.payload, price:BigInt(request.payload.price),qty:BigInt(request.payload.qty),leverage:BigInt(request.payload.leverage)}        
-          return  matchingEngine(payload)
-        break;}
-        case "createUser":{
-            const {userId} = request.payload;
-            return createUser(userId);}
-            break;
-        case "createMarket":
-            const { marketId} = request.payload;
-            return createMarket(marketId);
-            break;
-        case "rampUser":{
-            const {userId,credit}=request.payload;
-            return rampUser({userId,credit});}
-            break;
-    }
+    // switch(request.payloadType){
+    //     case "createOrder":{
+    //         console.log("create order is invoked");
+    //       const payload = { ...request.payload, price:BigInt(request.payload.price),qty:BigInt(request.payload.qty),leverage:BigInt(request.payload.leverage)}        
+    //       return  matchingEngine(payload)
+    //     break;}
+    //     // case "createUser":{
+    //     //     const {userId} = request.payload;
+    //     //     return createUser(userId);}
+    //     //     break;
+    //     // case "createMarket":
+    //     //     const { marketId} = request.payload;
+    //     //     return createMarket(marketId);
+    //     //     break;
+    //     // case "rampUser":{
+    //     //     const {userId,credit}=request.payload;
+    //     //     return rampUser({userId,credit});}
+    //         break;
+    // }
+         const payload = { ...request.payload, price:BigInt(request.payload.price),qty:BigInt(request.payload.qty),leverage:BigInt(request.payload.leverage)} 
+
+         return  matchingEngine(payload)
 
 
 }
 
-export  function matchingEngine(payload:PayloadOrder){
+export  function matchingEngine(payload:PayloadOrder):EngineResponse{
         //based on the side wether buy or sell we devide the order
     
     const market = markets.filter((m)=>m.marketId === payload.marketId)[0]; 
     const user = users.filter((user)=>user.userId === payload.userId)[0];
     if(user === undefined){
         console.log("bidder not found")
-        return { success:false,message:"user not found" }
+        return {event:"ORDER_REJECTED",payload:{error:"user not found",orderId:payload.orderId} }
     }
 
     if(market === undefined){
-        return { success:false, message:"market not found"};
+        return { event:"ORDER_ACCEPTED",payload:{error:"market not found",orderId:payload.orderId}};
     }
 
     
@@ -130,33 +133,31 @@ export  function matchingEngine(payload:PayloadOrder){
             user.collateral.locked += initialMargin;
 
         }else{
-            return { success:false, message:"user doesnot have enough margin for the leverage"}
+            return { event:"ORDER_REJECTED",payload:{error:"user doesnot have enough margin for the leverage",orderId:payload.orderId} }
         }
 
         //now we have the collateral needed to put the order in the book or execute it:
         //create order
-        const orderId = generateId();
-        const order = new Order(orderId,payload.userId,payload.marketId,payload.qty,payload.side,payload.price,payload.leverage);
+        const order = new Order(payload.orderId,payload.userId,payload.marketId,payload.qty,payload.side,payload.price,payload.leverage);
 
         const response =  matchOrder(user,order,market,orderBooks,users,fills);
-        const {filled,qty,leverage } = order;
-        return {...response,filled:filled.toString(),qty:qty.toString(),orderId};
+        return response;
         
 
-    }else{
+    }
         //execute for marketOrder
          let orderBook = orderBooks.get(payload.marketId);
         if(orderBook === undefined){
             console.log("creating the orderbook for the asset");
-            return { success:false,message:"orderbook does not exist cannot place order"};
+            return { event:"ORDER_REJECTED",payload:{error:"orderbook does not exist cannot place order",orderId:payload.orderId}};
             
         }
           let totalLevels = payload.side === "SHORT"?orderBook.bidTree.getLength():orderBook.askTree.getLength();
-          if(totalLevels === 0) return { success:false, message:"doesnot have liquidity in the market to place the order"}
+          if(totalLevels === 0) return { event:"ORDER_REJECTED",payload:{error:"doesnot have liquidity in the market to place the order",orderId:payload.orderId}}
 
         const estimatedPrice = calculateEstimatedPrice(payload.qty,payload.side,orderBook);
-        if(estimatedPrice === 0n) return { success:false,message:"unable to lock the balance"};
-        if(estimatedPrice === undefined) return { success:false,message:"unable to lock the balance"};
+        if(estimatedPrice === 0n) return  { event:"ORDER_REJECTED",payload:{error:"unable to lock the balance",orderId:payload.orderId}};
+        if(estimatedPrice === undefined) return  { event:"ORDER_REJECTED",payload:{error:"unable to lock the balance",orderId:payload.orderId}};;
           //first check the balances and lock collateral or initial margin from the leverage took and maintenance margin
         const positionSize = payload.qty*estimatedPrice;
         const initialMargin = positionSize/payload.leverage;
@@ -168,17 +169,12 @@ export  function matchingEngine(payload:PayloadOrder){
             user.collateral.locked += initialMargin;
 
         }else{
-            return { success:false, message:"user doesnot have enough margin for the leverage"}
+            return  { event:"ORDER_REJECTED",payload:{error:"user doesnot have enough margin for the leverage",orderId:payload.orderId}};
         }
         const orderId = generateId();
         const order = new Order(orderId,payload.userId,payload.marketId,payload.qty,payload.side,estimatedPrice,payload.leverage);
         const response = marketOrder(user,order,market,orderBooks,users,fills);
-        console.log("message from the matching order-",response);
         return response;
-
-    }
-    
-
 
 }
 
