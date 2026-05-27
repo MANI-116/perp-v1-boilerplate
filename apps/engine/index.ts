@@ -1,4 +1,4 @@
-import {OrderBook , Order,type Market, User, Fill, type PayloadOrder,type EngineResponse} from "@repo/types"
+import {OrderBook , Order,type Market, User, Fill, type PayloadOrder,type EngineResponse,Node,Position} from "@repo/types"
 import { matchOrder } from "./commons/limitOrder";
 import { marketOrder } from "./commons/market";
 import { calculateEstimatedPrice } from "./commons/common";
@@ -74,33 +74,120 @@ function generateId(){
     const id = `ord-${Date.now() + Math.random()*1e6}`;
     return id;
 }
-export function engineManager(request:any):EngineResponse{
+
+
+export async function liquidationEngine(newMarkPrice:{marketId:string,markPrice:string}){
+    const orderBook = orderBooks.get(newMarkPrice.marketId);
+    const lp = BigInt(newMarkPrice.markPrice);
+    if(orderBook  === undefined) throw new Error("orderBook is not defined");
+    let longLp = orderBook.longsTree.getTop();
+    if(longLp === undefined) return { message:"no longs availble"}
+    while(lp < longLp){
+        //liquidate the positions with this lp 
+        const levelData = orderBook.longs.get(lp);
+        if(levelData === undefined) return {message:"no positions at this lp"}
+        const positionsList = levelData.list;
+        const totalPositions = positionsList.length;
+        let position:Node<Position>|null = positionsList.getFirstOrder();
+
+        for(let i =0;i<totalPositions;i++){
+
+            //place opposite order with the quantity at market ;
+            if(position === null ) break;
+            const payload = {
+                                userId:position.value.userId,
+                                marketId:position.value.market,
+                                type:"MARKET",
+                                side:"SHORT",
+                                qty:position.value.qty,
+                                leverage:"1"
+                            };
+           try {
+                const id = await sender.xAdd("engine-stream","*",{paylooadType:"createOrder",corelationId:generateId(),payload:JSON.stringify(payload)})
+           } catch (error) {
+            console.log("error on sending the liquidation reuest to the engine-stream")
+            
+           }   
+           
+           position = position.right;
+            
+        }
+        //get new lp
+        orderBook.longsTree.pop();
+        longLp = orderBook.longsTree.getTop();
+        if(longLp === undefined) break;
+
+    }
+
+
+    ////liquidate the short positions
+     let shortLp = orderBook.shortsTree.getMinAsk();
+     if(shortLp === undefined) return { message:"no longs availble"}
+    while(lp > shortLp){
+        //liquidate the positions with this lp 
+        const levelData = orderBook.shorts.get(lp);
+        if(levelData === undefined) return {message:"no positions at this lp"}
+        const positionsList = levelData.list;
+        const totalPositions = positionsList.length;
+        let position:Node<Position>|null = positionsList.getFirstOrder();
+
+        for(let i =0;i<totalPositions;i++){
+
+            //place opposite order with the quantity at market ;
+            if(position === null ) break;
+            const payload = {
+                                userId:position.value.userId,
+                                marketId:position.value.market,
+                                type:"MARKET",
+                                side:"LONG",
+                                qty:position.value.qty,
+                                leverage:"1"
+                            };
+           try {
+                const id = await sender.xAdd("engine-stream","*",{paylooadType:"createOrder",corelationId:generateId(),payload:JSON.stringify(payload)})
+           } catch (error) {
+            console.log("error on sending the liquidation reuest to the engine-stream")
+            
+           }   
+           
+           position = position.right;
+            
+        }
+        //get new lp
+        orderBook.shortsTree.pop();
+        shortLp = orderBook.shortsTree.getMinAsk();
+        if(shortLp === undefined) break;
+
+    }
+
+    return { message:"iquidations got triggered annd placed orders in the engine-stream"}
+    
+}
+export function engineManager(request:any):EngineResponse|null{
 
     request.payload = JSON.parse(request.payload);
     console.log("message from the sreams-",request);
 
-    // switch(request.payloadType){
-    //     case "createOrder":{
-    //         console.log("create order is invoked");
-    //       const payload = { ...request.payload, price:BigInt(request.payload.price),qty:BigInt(request.payload.qty),leverage:BigInt(request.payload.leverage)}        
-    //       return  matchingEngine(payload)
-    //     break;}
-    //     // case "createUser":{
-    //     //     const {userId} = request.payload;
-    //     //     return createUser(userId);}
-    //     //     break;
-    //     // case "createMarket":
-    //     //     const { marketId} = request.payload;
-    //     //     return createMarket(marketId);
-    //     //     break;
-    //     // case "rampUser":{
-    //     //     const {userId,credit}=request.payload;
-    //     //     return rampUser({userId,credit});}
-    //         break;
-    // }
-         const payload = { ...request.payload, price:BigInt(request.payload.price),qty:BigInt(request.payload.qty),leverage:BigInt(request.payload.leverage)} 
-
-         return  matchingEngine(payload)
+    switch(request.payloadType){
+        case "createOrder":{
+            console.log("create order is invoked");
+          const payload = { ...request.payload, price:BigInt(request.payload.price),qty:BigInt(request.payload.qty),leverage:BigInt(request.payload.leverage)}        
+          return  matchingEngine(payload)
+        break;}
+        // case "createUser":{
+        //     const {userId} = request.payload;
+        //     return createUser(userId);}
+        //     break;
+        // case "createMarket":
+        //     const { marketId} = request.payload;
+        //     return createMarket(marketId);
+        //     break;
+        // case "rampUser":{
+        //     const {userId,credit}=request.payload;
+        //     return rampUser({userId,credit});}
+            break;
+    }
+    throw new Error("no request type matched");
 
 
 }
@@ -171,8 +258,7 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
         }else{
             return  { event:"ORDER_REJECTED",payload:{error:"user doesnot have enough margin for the leverage",orderId:payload.orderId}};
         }
-        const orderId = generateId();
-        const order = new Order(orderId,payload.userId,payload.marketId,payload.qty,payload.side,estimatedPrice,payload.leverage);
+        const order = new Order(payload.orderId,payload.userId,payload.marketId,payload.qty,payload.side,estimatedPrice,payload.leverage);
         const response = marketOrder(user,order,market,orderBooks,users,fills);
         return response;
 
@@ -223,6 +309,9 @@ while(true){
         for(const msg of messages){
             id = msg.id;
             const response = engineManager(msg.message);
+            if(response === null) continue;
+
+            
             console.log("reponse form the engineManager-",response);
             const res = await receiver.xAck("engine-stream","engine-group",id);
             const senderRes = await sender.xAdd("response-stream","*",{message:JSON.stringify(response),corelationId:msg.message.corelationId?msg.message.corelationId:""});

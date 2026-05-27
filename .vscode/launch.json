@@ -12,7 +12,7 @@
             "name": "Debug File",
             "program": "${workspaceFolder}/apps/backend/index.ts",
             "cwd": "${workspaceFolder}/apps/backend",
-            "stopOnEntry": true,
+            "stopOnEntry": false,
             "watchMode": false
         },
         {
@@ -20,9 +20,8 @@
             "internalConsoleOptions": "neverOpen",
             "request": "launch",
             "name": "Run File",
-            "program": "${workspaceFolder}/apps/backend/index.ts",
-            "cwd": "${workspaceFolder}/apps/backend",
-            "noDebug": true,
+            "program": "${workspaceFolder}/apps/engine/index.ts",
+            "cwd": "${workspaceFolder}/apps/engine",
             "stopOnEntry": true,
             "watchMode": false
         },

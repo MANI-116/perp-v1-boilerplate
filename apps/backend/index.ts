@@ -109,7 +109,8 @@ app.post("/order", async (req, res) => {
         // if(!userId) return  res.send("no user found");
         const payload = CreateOrderSchema.parse(req.body);
         const corelationId = generateId();
-        const response = await responseManager.putRequest({payload:JSON.stringify({...payload}),payloadType:"createOrder",corelationId})
+        const orderId = generateId();
+        const response = await responseManager.putRequest({payload:JSON.stringify({...payload,orderId}),payloadType:"createOrder",corelationId})
         
         return res.json({...response})
         

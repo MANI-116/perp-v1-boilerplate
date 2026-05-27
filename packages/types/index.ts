@@ -48,7 +48,10 @@ export class User {
 export interface Market{
     markPrice:bigint,
     marketId:string,
-    mmr:bigint
+    mmr:bigint,
+    takerRate:bigint,
+    makerRate:bigint,
+    taxationScale:bigint
 }
 export class Position {
     public id:string;
@@ -157,6 +160,8 @@ export class Order{
     public filled:bigint = 0n;
     public status:OrderStatus = "OPEN"
     constructor(public orderId:string,public userId:string,public assetId:string, public qty:bigint, public side:OrderSide , public price:bigint, public leverage:bigint){
+        console.log("orderId-",this.orderId)
+        if(this.orderId === "" || this.orderId === undefined) throw new Error("orderId is needed")
         this.initialMargin =(this.qty*this.price)/this.leverage 
         this.maintenanceMargin = (this.qty * this.price*5n)/1000n;
     }
@@ -251,6 +256,8 @@ export class PriceLevelObject<T extends Qty>{
         let orderNode = new Node<T>(order);
         this.list = new Dll<T>(orderNode);
         this.length ++;
+        const qty = order.qty;
+        this.totalQty += qty;
         return 
 
     }
@@ -258,10 +265,20 @@ export class PriceLevelObject<T extends Qty>{
 
     addNode(node:Node<T>){
         this.length++;
-        this.totalQty++;
+        const qty = node.value.qty;
+        this.totalQty += qty;
         this.list.addNode(node);
         return;
 
+    }
+
+    removeNode(node:Node<T>){
+        const response = this.list.removeNode(node);
+        if(response.success){
+            this.totalQty -= node.value.qty;
+            this.length --;
+        }
+        return response;
     }
 
 }
@@ -479,8 +496,8 @@ export class OrderBook{
     public bids:Map<bigint,PriceLevelObject<Order>>;
     public askTree:AskTree;
     public bidTree:BidTree;
-    private longsTree:BidTree;
-    private shortsTree:AskTree;
+    public longsTree:BidTree;
+    public shortsTree:AskTree;
     private ordersRef:Map<string,Node<Order>>
     public longs:Map<bigint,PriceLevelObject<Position>>
     public shorts:Map<bigint,PriceLevelObject<Position>>
@@ -548,155 +565,156 @@ export class OrderBook{
     }
     }
 
-  
- removeAskOrder(order:Order){
-    //we need to remove the orderRef
-    //we need to remove the level if dll have only one order also
-    const priceLevel = order.price;
-    const priceLevelData = this.asks.get(priceLevel);
-    if(priceLevelData === undefined){
-        return { succes:true,message:"price level not found"};
-
-    }
-    const levelList = priceLevelData.list;
-    let orderNode = this.ordersRef.get(order.orderId);
-    if(orderNode === undefined){ return {success:true,message:"order not found"}}
-    const response =levelList.removeNode(orderNode);
-    if(!response.success){
-        //we nee to remove the price level
-        this.asks.delete(priceLevel);
-        console.log("removed the price Level")
-        
-    }
-    this.ordersRef.delete(order.orderId);
-    return { success:"true",message:"removed order"}
-
- }
-
-removeBuyOrder(order:Order){
-    //we need to remove the orderRef
-    //we need to remove the level if dll have only one order also
-    const priceLevel = order.price;
-    const priceLevelData = this.bids.get(priceLevel);
-    if(priceLevelData === undefined){
-        return { succes:true,message:"price level not found"};
-
-    }
-    const levelList = priceLevelData.list;
-    let orderNode = this.ordersRef.get(order.orderId);
-    if(orderNode === undefined){ return {success:true,message:"order not found"}}
-    const response =levelList.removeNode(orderNode);
-    if(!response.success){
-        //we nee to remove the price level
-        this.bids.delete(priceLevel);
-        console.log("removed the price Level")
-        
-    }
-    this.ordersRef.delete(order.orderId);
-    return { success:"true",message:"removed order"}
-
- }
-
- addLong(position:Position){
-    const liquidationPrice = position.liquidationPrice;
-
-    //if we have the pricelevel 
-    let levelData = this.longs.get(liquidationPrice);
-    let positionRef:Node<Position>
-    if(levelData === undefined){
-    //-->  create the the pricelevel and add postion and add level to the longsTree
-        levelData = new PriceLevelObject<Position>(position);
-        this.longs.set(liquidationPrice,levelData);
-        positionRef = levelData.list.getFirstOrder();
-        this.longsTree.addPrice(liquidationPrice);
-
-    }else{
-        //-->then added it to the list add postion reference to positionrefmap 
-        positionRef = new Node<Position>(position)
-        levelData.list.addNode(positionRef);
-        
-    }
-    //add the reference to the map
-    this.postionsRef.set(positionRef.value.id,positionRef);
-    return { message:"added successfully"};
-
- }
-
- addShort(position:Position){
-    const liquidationPrice = position.liquidationPrice;
-
-    //if we have the pricelevel 
-    let levelData = this.shorts.get(liquidationPrice);
-    let positionRef:Node<Position>
-    if(levelData === undefined){
-    //-->  create the the pricelevel and add postion and add level to the longsTree
-        levelData = new PriceLevelObject<Position>(position);
-        this.shorts.set(liquidationPrice,levelData);
-        positionRef = levelData.list.getFirstOrder();
-        this.shortsTree.addPrice(liquidationPrice);
-
-    }else{
-        //-->then added it to the list add postion reference to positionrefmap 
-        positionRef = new Node<Position>(position)
-        levelData.list.addNode(positionRef);
-        
-    }
-    //add the reference to the map
-    this.postionsRef.set(positionRef.value.id,positionRef);
-    return { message:"added successfully"};
-
- }
-
- removeShort(position:Position ,lp?:bigint){
-    //get the level
-    // ******** lp is for the postions which transitioned from the short to long
-    //single order remove level,remove ref and remove treePrice check wether positon is long or short
-    const level = lp? this.shorts.get(lp): this.shorts.get(position.liquidationPrice);
-    if(level === undefined){ return { success:false, message:"position doesnot exist"}};
-    //get the reference of the position
-    const posRef = this.postionsRef.get(position.id);
-     if(posRef === undefined){
-         return { success:false, message:"no position found"}
-     }
-    const response = level.list.removeNode(posRef);
-    if(!response.success){
-        //single order ,need to remove the whole level and levelprice in the shorts tree
-        console.log("removing level and the pprice in tree")
-        this.shorts.delete(position.liquidationPrice);
-        this.shortsTree.removePrice(position.liquidationPrice);
-        this.postionsRef.delete(position.id);
-        return {success:true,message:"position removed succesfully"}
-    }
-    this.postionsRef.delete(position.id);
-    return { success:true, message:"removed the postion"}
     
+    removeAskOrder(order:Order){
+        //we need to remove the orderRef
+        //we need to remove the level if dll have only one order also
+        const priceLevel = order.price;
+        const priceLevelData = this.asks.get(priceLevel);
+        if(priceLevelData === undefined){
+            return { succes:true,message:"price level not found"};
 
- }
+        }
+        const levelList = priceLevelData.list;
+        let orderNode = this.ordersRef.get(order.orderId);
+        if(orderNode === undefined){ return {success:true,message:"order not found"}}
+        const response = priceLevelData.removeNode(orderNode);
+        if(!response.success){
+            //we nee to remove the price level
+            this.asks.delete(priceLevel);
+            console.log("removed the price Level")
+            
+        }
+        this.ordersRef.delete(order.orderId);
+        return { success:"true",message:"removed order"}
 
- removeLong(position:Position,lp?:bigint){
-    //get the level
-    //single order remove level,remove ref and remove treePrice
-    const level =lp?this.longs.get(lp): this.longs.get(position.liquidationPrice);
-    if(level === undefined){ return { success:false, message:"position doesnot exist"}};
-    //get the reference of the position
-    const posRef = this.postionsRef.get(position.id);
-     if(posRef === undefined){
-         return { success:false, message:"no position found"}
-     }
-    const response = level.list.removeNode(posRef);
-    if(!response.success){
-        //single order ,need to remove the whole level and levelprice in the longs tree
-        console.log("removing level and the pprice in tree")
-        this.longs.delete(position.liquidationPrice);
-        this.longsTree.removePrice(position.liquidationPrice);
-        this.postionsRef.delete(position.id);
-        return {success:true,message:"position removed succesfully"}
     }
-    this.postionsRef.delete(position.id);
-    return { success:true, message:"removed the postion"}
 
- }
+    removeBuyOrder(order:Order){
+        //we need to remove the orderRef
+        //we need to remove the level if dll have only one order also
+        const priceLevel = order.price;
+        const priceLevelData = this.bids.get(priceLevel);
+        if(priceLevelData === undefined){
+            return { succes:true,message:"price level not found"};
 
+        }
+        const levelList = priceLevelData.list;
+        let orderNode = this.ordersRef.get(order.orderId);
+        if(orderNode === undefined){ return {success:true,message:"order not found"}}
+        const response = priceLevelData.removeNode(orderNode);
+        if(!response.success){
+            //we nee to remove the price level
+            this.bids.delete(priceLevel);
+            console.log("removed the price Level")
+            
+        }
+        this.ordersRef.delete(order.orderId);
+        return { success:"true",message:"removed order"}
+
+    }
+
+    addLong(position:Position){
+        const liquidationPrice = position.liquidationPrice;
+
+        //if we have the pricelevel 
+        let levelData = this.longs.get(liquidationPrice);
+        let positionRef:Node<Position>
+        if(levelData === undefined){
+        //-->  create the the pricelevel and add postion and add level to the longsTree
+            levelData = new PriceLevelObject<Position>(position);
+            this.longs.set(liquidationPrice,levelData);
+            positionRef = levelData.list.getFirstOrder();
+            this.longsTree.addPrice(liquidationPrice);
+
+        }else{
+            //-->then added it to the list add postion reference to positionrefmap 
+            positionRef = new Node<Position>(position)
+            levelData.list.addNode(positionRef);
+            
+        }
+        //add the reference to the map
+        this.postionsRef.set(positionRef.value.id,positionRef);
+        return { message:"added successfully"};
+
+    }
+
+    addShort(position:Position){
+        const liquidationPrice = position.liquidationPrice;
+
+        //if we have the pricelevel 
+        let levelData = this.shorts.get(liquidationPrice);
+        let positionRef:Node<Position>
+        if(levelData === undefined){
+        //-->  create the the pricelevel and add postion and add level to the longsTree
+            levelData = new PriceLevelObject<Position>(position);
+            this.shorts.set(liquidationPrice,levelData);
+            positionRef = levelData.list.getFirstOrder();
+            this.shortsTree.addPrice(liquidationPrice);
+
+        }else{
+            //-->then added it to the list add postion reference to positionrefmap 
+            positionRef = new Node<Position>(position)
+            levelData.list.addNode(positionRef);
+            
+        }
+        //add the reference to the map
+        this.postionsRef.set(positionRef.value.id,positionRef);
+        return { message:"added successfully"};
+
+    }
+
+    removeShort(position:Position ,lp?:bigint){
+        //get the level
+        // ******** lp is for the postions which transitioned from the short to long
+        //single order remove level,remove ref and remove treePrice check wether positon is long or short
+        const level = lp? this.shorts.get(lp): this.shorts.get(position.liquidationPrice);
+        if(level === undefined){ return { success:false, message:"position doesnot exist"}};
+        //get the reference of the position
+        const posRef = this.postionsRef.get(position.id);
+        if(posRef === undefined){
+            return { success:false, message:"no position found"}
+        }
+        const response = level.list.removeNode(posRef);
+        if(!response.success){
+            //single order ,need to remove the whole level and levelprice in the shorts tree
+            console.log("removing level and the pprice in tree")
+            this.shorts.delete(position.liquidationPrice);
+            this.shortsTree.removePrice(position.liquidationPrice);
+            this.postionsRef.delete(position.id);
+            return {success:true,message:"position removed succesfully"}
+        }
+        this.postionsRef.delete(position.id);
+        return { success:true, message:"removed the postion"}
+        
+
+    }
+
+    removeLong(position:Position,lp?:bigint){
+        //get the level
+        //single order remove level,remove ref and remove treePrice
+        const level =lp?this.longs.get(lp): this.longs.get(position.liquidationPrice);
+        if(level === undefined){ return { success:false, message:"position doesnot exist"}};
+        //get the reference of the position
+        const posRef = this.postionsRef.get(position.id);
+        if(posRef === undefined){
+            return { success:false, message:"no position found"}
+        }
+        const response = level.list.removeNode(posRef);
+        if(!response.success){
+            //single order ,need to remove the whole level and levelprice in the longs tree
+            console.log("removing level and the pprice in tree")
+            this.longs.delete(position.liquidationPrice);
+            this.longsTree.removePrice(position.liquidationPrice);
+            this.postionsRef.delete(position.id);
+            return {success:true,message:"position removed succesfully"}
+        }
+        this.postionsRef.delete(position.id);
+        return { success:true, message:"removed the postion"}
+
+    }
+
+    
 
 }
 
