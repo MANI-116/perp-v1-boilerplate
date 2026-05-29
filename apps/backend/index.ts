@@ -229,11 +229,35 @@ app.delete("/order", async (req, res) => {
     }
     
 })
-app.get("/equity/available", (req, res) => {})
-app.get("/positions/open/:marketId", (req, res) => {});
-app.get("/positions/closed/:marketId", (req, res) => {});
-app.get("/orders/open/:marketId", (req, res) => {})
-app.get("/orders/:marketId", (req, res) => {})  
+app.get("/equity/available", async(req, res) => {
+
+    try {
+        
+    } catch (error) {
+        
+    }
+})
+app.get("/positions/open/:marketId",AuthMiddleWare, async (req, res) => {});
+app.get("/positions/closed/:marketId",AuthMiddleWare,async (req, res) => {});
+app.get("/orders/open/:marketId",AuthMiddleWare,async (req, res) => {})
+app.get("/orders/:marketId",AuthMiddleWare,async (req, res) => {
+    try {
+        const userId = req.body.userId;
+        const {marketId } = req.params;
+
+        if(typeof marketId != "string") return res.send("send proper marketid")
+        const orders = await prisma.order.findMany({where:{
+            userId,
+            marketId 
+        }})
+
+        return res.status(200).json({orders});
+
+    } catch (error) {
+         res.status(500).json({error:"internal server error"});
+        
+    }
+})  
 app.get("/fills",AuthMiddleWare,async (req, res) => {
     const userId = req.body.userId;
 try {
@@ -253,7 +277,7 @@ try {
 
     return res.status(200).json({fills});
 } catch (error) {
-    
+            res.status(500).json({error:"internal server error"});
 }
     
 
