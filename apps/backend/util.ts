@@ -1,5 +1,5 @@
 import { createClient} from "redis"
-
+import { type CreateUser,type PayloadOrder,type EngineRequest} from "@repo/types"
 export function generateId(){
     const id = `ord-${Date.now() + Math.random()*1e6}`;
     return id;
@@ -62,12 +62,13 @@ export class ResponseManager{
   
         }
     }
-    async putRequest(message:any){
+    async putRequest(type:string,message:EngineRequest["payload"]){
         try {
-          const id = await this.sender.xAdd("engine-stream","*",message);
+            const corelationId = generateId();
+          const id = await this.sender.xAdd("engine-stream","*",{corelationId,type,payload:JSON.stringify(message)});
         console.log("messsage is added to the queue")
         return new Promise<EngineResponse>((res,rej)=>{
-            this.requestMap.set(message.corelationId,res);
+            this.requestMap.set(corelationId,res);
         })      
         } catch (error) {
           console.log("error on placing the request to the engine-",error);

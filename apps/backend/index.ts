@@ -2,9 +2,10 @@ import express, {type Request} from "express";
 import{z, ZodError} from "zod"
 import jwt,{type JwtPayload} from "jsonwebtoken"
 import cookieParser  from "cookie-parser"
-import { User} from "@repo/types"
+import { User, type EngineRequest, type CreateUser} from "@repo/types"
 import { engineManager } from "../engine/index.ts";
 import { ResponseManager} from "./util.ts"
+import { prisma } from "@repo/db"
 
 
 const responseManager = await ResponseManager.create()
@@ -45,58 +46,140 @@ const CreateOrderSchema = z.object({
 })
 
 const signUpSchema = z.object({
+    name:z.string().min(1).max(90),
     username:z.string().min(4).max(25),
     password:z.string().min(6).max(30)
+})
+
+const createMarketSchema = z.object({
+    name:z.string().min(2),
+    symbol:z.string(),
+    slug:z.string(),
+    scale:z.string(),
+    markPrice:z.string(),
+    takerRate:z.string(),
+    makerRate:z.string(),
+    mmr:z.string()
+})
+
+app.post("/admin/market",async (req,res)=>{
+
+    try {
+        
+        const marketDetails = createMarketSchema.parse(req.body);
+    
+        const response = await prisma.market.create({
+            data:{
+                ...marketDetails,
+                  scale:BigInt(marketDetails.scale),
+                    markPrice:BigInt(marketDetails.markPrice),
+                    takerRate:BigInt(marketDetails.takerRate),
+                    makerRate:BigInt(marketDetails.makerRate),
+                    mmr:BigInt(marketDetails.mmr)
+
+            }
+        })
+
+        console.log("market is created-",response);
+
+       const engineResponse =  responseManager.putRequest("CREATE_MARKET",{...marketDetails});
+
+       res.status(200).send("market added successfully");
+    } catch (error) {
+        
+        res.status(500).send("unknownerror")
+    }
+
+
 })
 
 
 app.post("/signup", async (req, res) => {
     console.log("user signup");
-    const parsedResponse = await signUpSchema.safeParseAsync(req.body);
-    if(!parsedResponse.success){
-        return res.status(400).json({message:"validation error", error:parsedResponse.error})
+
+    try {   
+        const parsedResponse = await signUpSchema.safeParseAsync(req.body);
+        if(!parsedResponse.success){
+            return res.status(400).json({message:"validation error", error:parsedResponse.error})
+        }
+        
+        const { username, password, name } = parsedResponse.data;
+        
+        const userFound = await prisma.user.findUnique({
+            where:{username:username},
+            select:{userId:true}, });
+        if(userFound  !=  null) {
+            return res.status(401).send({message:"username taken", error:"duplicate"});
+        }
+        
+        //create the user
+        
+        const newUser  = await prisma.user.create({
+            data:{
+                username:username,
+                name:name,
+                password:password
+            },
+            select:{
+                userId:true
+            }
+        })
+        if(!newUser.userId){
+            throw new Error("userId not created");
+        }
+        const userId = newUser.userId ;
+        //add user to the engine
+        responseManager.putRequest("CREATE_ORDER",{userId,collateral:{available:"0",locked:"0"}})
+        return res.status(201).send({message:"user created", userId:newUser.userId});
+    } catch (error) {
+
+        return res.status(404).send({error:"error occured",message:error})
+        
     }
-    
-    const { username, password } = parsedResponse.data;
-    
-    const userFound = users.filter((user)=>user.username === username);
-    if(userFound.length != 0) {
-        return res.status(401).send({message:"username taken", error:"duplicate"});
-    }
-    
-    //create the user
-    const userId = generateId();
-    const newUser:TempUser  = {userId,username,password}
-    users.push(newUser);
-    return res.status(201).send({message:"user created", userId})
+
 })
 
 
-app.post("/signin", (req, res) => {
+app.post("/signin",async (req, res) => {
+
+    try {
+        
+        const parsedData =  signUpSchema.safeParse(req.body);
+        
+        if(!parsedData.success){
+            return res.status(400).json({
+                message: "validation error",
+                error: parsedData.error
+            })
+        }
+        
+        const {username, password } = parsedData.data;
+        
+        const user = await prisma.user.findUnique({
+            where:{
+                username:username
+            },
+            select:{
+                password:true,
+                userId:true
+            }
+        });
+
+        if(!user || user.password != password) return res.status(400).send({message:"please check your password and username"});
+        
+        //cerate token
+        const passCode = process.env.JWT_PASS;
+        if(passCode === undefined) { console.log(" env are not loaded")
+            return res.status(500).send({message:"internal server error"});
+    }
+    const token = jwt.sign({userId:user.userId},passCode,{expiresIn:"1d"});
     
-    const parsedData =  signUpSchema.safeParse(req.body);
-    
-    if(!parsedData.success){
-        return res.status(400).json({
-            message: "validation error",
-            error: parsedData.error
-        })
+    return res.status(200).cookie("Authorization",token).json({message:"successfull"});
+    } catch (error) {      
+        return res.status(404).send({error:"error occured",message:error})
+               
     }
     
-    const {username, password } = parsedData.data;
-    
-    const user = users.filter((user)=>user.username===username && user.password === password)[0];
-    
-    if(user === undefined ) return res.status(400).send({message:"please check your password and username"});
-    
-    //cerate token
-    const passCode = process.env.JWT_PASS;
-    if(passCode === undefined) { console.log(" env are not loaded")
-        return res.status(500).send({message:"internal server error"});
-}
-const token = jwt.sign({userId:user.userId},passCode,{expiresIn:"1d"});
-
-return res.status(200).cookie("Authorization",token).json({message:"successfull"});
 })
 app.post("/onramp", AuthMiddleWare,(req:AuthRequest, res) => {
     console.log("ramping the users balance");
@@ -108,9 +191,8 @@ app.post("/order", async (req, res) => {
         // const userId = req.userId;
         // if(!userId) return  res.send("no user found");
         const payload = CreateOrderSchema.parse(req.body);
-        const corelationId = generateId();
         const orderId = generateId();
-        const response = await responseManager.putRequest({payload:JSON.stringify({...payload,orderId}),payloadType:"createOrder",corelationId})
+        const response = await responseManager.putRequest("CREATE_ORDER",{...payload,orderId})
         
         return res.json({...response})
         
@@ -130,7 +212,7 @@ app.get("/equity/available", (req, res) => {})
 app.get("/positions/open/:marketId", (req, res) => {});
 app.get("/positions/closed/:marketId", (req, res) => {});
 app.get("/orders/open/:marketId", (req, res) => {})
-app.get("/orders/:marketId", (req, res) => {})
+app.get("/orders/:marketId", (req, res) => {})  
 app.get("/fills", (req, res) => {});
 
 

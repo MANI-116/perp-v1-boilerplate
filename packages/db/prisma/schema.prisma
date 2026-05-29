@@ -1,0 +1,81 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User{
+  userId String  @id @default(uuid())
+  username String @unique
+  name String 
+  password String
+  orders Order[]
+  maker Transaction[] @relation("maker")
+  taker Transaction[] @relation("taker")
+  createdAt DateTime @default(now())
+
+}
+
+enum OrderType{
+  MARKET
+  LIMIT
+}
+
+enum OrderSide{
+  SHORT
+  LONG
+}
+model Order{
+  id String @id @default(uuid())
+  orderId  String @unique 
+  qty BigInt
+  filled BigInt
+  price BigInt
+  marketId String
+  type   OrderType
+  side OrderSide
+  slippage BigInt?
+  userId String 
+  MakerTransactions Transaction[] @relation("taker")
+  TakerTransactions Transaction[] @relation("maker")
+  user User @relation(fields: [userId],references: [userId])
+}
+
+
+model Transaction{
+  id String @id @default(uuid())
+  qty BigInt 
+  price BigInt
+  takerId String
+  makerId String
+  takerFee BigInt
+  makerFee BigInt
+  makerOrderId String
+  takerOrderId String
+  MakerOrder Order @relation("maker",fields:[makerOrderId],references: [id])
+  TakerOrder Order @relation("taker",fields:[takerOrderId],references:[id])
+  maker User @relation("maker",fields:[makerId],references:[userId])
+  taker User @relation("taker",fields:[takerId],references:[userId])
+
+}
+
+model Market{
+  id String @id @default(uuid())
+  name String @unique
+  symbol String @unique
+  slug String @default("no url")
+  scale BigInt
+  markPrice BigInt
+  takerRate BigInt
+  makerRate BigInt
+  mmr       BigInt
+
+}

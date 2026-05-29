@@ -16,6 +16,17 @@ export interface PayloadOrder{
     orderId:string
 }
 
+export interface EngineCreateOrder{
+    type:"MARKET"|"LIMIT",
+    marketId:string
+    userId:string,
+    side:OrderSide,
+    leverage:string,
+    qty:string,
+    price:string,
+    orderId:string
+}
+
 export class Fill{
     private fillId:string;
     private tradeId:string;
@@ -515,6 +526,17 @@ export class OrderBook{
         this.shorts = new Map<bigint,PriceLevelObject<Position>>();
         this.postionsRef = new Map<string,Node<Position>>();
     }
+
+    deleteOrder(orderId:string){
+        const node =  this.ordersRef.get(orderId);
+        if(!node) return { error:"did not find the reference"};
+        const order = node.value;
+        const side = order.side;
+        const priceLevel = order.price;
+        const levelData = side === "SHORT" ? this.asks.get(priceLevel):this.bids.get(priceLevel);
+        levelData?.removeNode(node);
+        
+    }
     addShortLiquidationPrice(price:bigint){
        return  this.shortsTree.addPrice(price);
     }
@@ -718,6 +740,16 @@ export class OrderBook{
 
 }
 
+
+export interface Transaction{
+  qty:bigint 
+  price:bigint
+  takerId: string       
+  makerId: string       
+  takerFee:bigint
+  makerFee :bigint
+  orderId: string       
+}
 
 
 
