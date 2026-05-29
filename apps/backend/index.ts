@@ -1,4 +1,4 @@
-import express, {type Request} from "express";
+import express, {response, type Request} from "express";
 import{z, ZodError} from "zod"
 import jwt,{type JwtPayload} from "jsonwebtoken"
 import cookieParser  from "cookie-parser"
@@ -205,7 +205,28 @@ app.post("/order", async (req, res) => {
         
     }
 })
-app.delete("/order", (req, res) => {
+
+const delteOrderSchema = z.object({
+    orderId:z.string().min(2),
+    marketId:z.string().min(2)
+})
+app.delete("/order", async (req, res) => {
+
+    try {
+            const parsedOrder = delteOrderSchema.safeParse(req.body);
+            if(parsedOrder.error){
+                return res.status(400).json(parsedOrder.data)
+            }
+            const response = await responseManager.putRequest("DELETE_ORDER",parsedOrder.data);
+
+            return res.status(204).json(response);
+        
+            
+    } catch (error) {
+
+        res.status(500).json({error:"internal server error"});
+        
+    }
     
 })
 app.get("/equity/available", (req, res) => {})
@@ -213,7 +234,30 @@ app.get("/positions/open/:marketId", (req, res) => {});
 app.get("/positions/closed/:marketId", (req, res) => {});
 app.get("/orders/open/:marketId", (req, res) => {})
 app.get("/orders/:marketId", (req, res) => {})  
-app.get("/fills", (req, res) => {});
+app.get("/fills",AuthMiddleWare,async (req, res) => {
+    const userId = req.body.userId;
+try {
+    const fills = await prisma.transaction.findMany({
+        where:{
+            OR:[
+                {takerId:userId},
+                {makerId:userId}
+            ]
+        },
+        select:{
+            qty:true,
+            price:true,
+            marketId:true
+        }
+    });
+
+    return res.status(200).json({fills});
+} catch (error) {
+    
+}
+    
+
+});
 
 
 app.listen(process.env.PORT,()=>{

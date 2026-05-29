@@ -97,10 +97,13 @@ export interface CreateMarket{
     mmr: string;
 
 }
-
+export interface DeleteOrder{
+    marketId:string,
+    orderId:string
+}
 export interface EngineRequest{
-    type:"CREATE_ORDER"|"CREATE_USER"|"RAMP_USER"|"CREATE_MARKET"|"UPDATE_MARKET",
-    payload:CreateUser|EngineCreateOrder|CreateMarket
+    type:"CREATE_ORDER"|"CREATE_USER"|"RAMP_USER"|"CREATE_MARKET"|"UPDATE_MARKET"|"DELETE_ORDER",
+    payload:CreateUser|EngineCreateOrder|CreateMarket|DeleteOrder
     corelationId:string
 }
 
