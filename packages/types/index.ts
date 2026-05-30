@@ -1,8 +1,69 @@
+import type { EngineEvent } from "./structures/engineEvents.ts";
 
 
-function generateId(){
+export function generateId(){
     const id = `ord-${Date.now() + Math.random()*1e6}`;
     return id;
+}
+
+export interface RedisResponse  {
+    name: string;
+    messages: {
+        id: string;
+        message: {
+            [x: string]: string;
+        };
+        millisElapsedFromDelivery?: number | undefined;
+        deliveriesCounter?: number | undefined;
+    }[]
+}
+
+// type EngineRequest = "CREATE_USER"|"GET_OPEN_POSITIONS"|"GET_CLOSED_POSITIONS"|"CREATE_USER"|"RAMP_USER"|"CREATE_MARKET"|"GET_EQUITY"
+
+export type EngineRequest = {
+[K in keyof EngineRequestMap]:{
+    type:K,
+    payload:EngineRequestMap[K]
+}
+}[keyof EngineRequestMap]
+interface EngineRequestMap{
+        "CREATE_ORDER":PayloadOrder,
+        "CREATE_USER":CreateUser,
+        "CREATE_MARKET":CreateMarket,
+        "RAMP_USER":RampUser,
+        "DELETE_ORDER":DeleteOrder,
+        "GET_OPEN_POSITIONS":GetPositions,
+        "GET_CLOSED_POSITIONS":GetPositions,
+        "GET_EQUITY":GetEquity
+}
+interface CreateUser{
+    userId:string,
+}
+
+interface CreateMarket{
+    marketId:string;
+}
+
+
+interface RampUser{
+    userId:string,
+    credit:BigInt
+}
+
+
+interface DeleteOrder{
+    orderId:string,
+    marketId:string
+}
+
+
+interface GetPositions{
+    userId:string,
+    marketId:string
+}
+
+interface GetEquity{
+    userId:string
 }
 
 export interface PayloadOrder{
@@ -47,10 +108,12 @@ export class User {
     public collateral:Collateral;
     public positions:Position[];
     public orders:Order[];
+    public closedPositions:Position[]
     
     constructor(public userId:string){
         this.positions = [];
         this.orders = [];
+        this.closedPositions=[];
         this.collateral = {available:0n,locked:0n}
 
     }

@@ -5,64 +5,8 @@
  * ORDER PARTIALLY FILLED EVENT
  */
 
-import type { EngineCreateOrder, OrderSide, PayloadOrder } from ".."
+import type { EngineCreateOrder, OrderSide, Position } from ".."
 
-
-/**
- * ORDER FILLED HAVE FOLLOWING
- * ->details of order
- * ->details of metched order
- * ->detials transactions
- * 
- * mainOrder:
- * orderId
- * filled
- * 
- * matchedorders:[]
- * matchedorderId
- * qty-transfered
- * price
- * {
- * eventType:"ORDERFILLED"
- * orderId:string;
- * matchedOrders:matchOrder[]
- * }
- * matchOrder{
- * price:string,
- * qtyTransfered:string
- * orderId
- * }
- * 
- */
-
-
-
-/**
- * ORDER_PARTIALLY_FILLED HAVE FOLLOWING
- * ->details of order
- * ->details of metched order
- * ->detials transactions
- * 
- * mainOrder:
- * orderId
- * filled
- * 
- * matchedorders:[]
- * matchedorderId
- * qty-transfered
- * price:string
- * {
- * eventType:"ORDER_PARTIALLY_FILLED"
- * orderId:string;
- * matchedOrders:matchOrder[]
- * }
- * matchOrder{
- * price:string,
- * qtyTransfered:string
- * orderId
- * }
- * 
- */
 
 type Direction = "1"|"-1"
 
@@ -167,8 +111,38 @@ export interface EventMap{
     "CREATE_USER":EngineUser,
     "CREATE_MARKET":EngineRampUser,
     "RAMP_USER":EngineMarket,
-    "DELETE_ORDER":EngineDeleteOrder
+    "DELETE_ORDER":EngineDeleteOrder,
+    "GET_OPEN_POSITIONS":OpenPositions,
+    "GET_CLOSED_POSITIONS":ClosedPositions,
+    "GET_EQUITY":GetEquity
 
+}
+
+interface ClosedPositions{
+    success:boolean,
+    error?:string,
+    data ?: {
+        positions:Position[]
+    }
+
+}
+
+
+interface GetEquity{
+    success:boolean,
+    error?:string,
+    data ?: {
+        equity:string
+    }
+
+}
+
+interface OpenPositions{
+    success:boolean,
+    error?:string,
+    data ?: {
+        positions:Position[]
+    }
 }
 
 export interface EngineUser{

@@ -2,8 +2,6 @@ import express, {response, type Request} from "express";
 import{z, ZodError} from "zod"
 import jwt,{type JwtPayload} from "jsonwebtoken"
 import cookieParser  from "cookie-parser"
-import { User, type EngineRequest, type CreateUser} from "@repo/types"
-import { engineManager } from "../engine/index.ts";
 import { ResponseManager} from "./util.ts"
 import { prisma } from "@repo/db"
 
@@ -38,9 +36,9 @@ const CreateOrderSchema = z.object({
         type:TypeSchema,
         marketId:z.string().min(4),
         side:SideSchema,
-        leverage:z.string().regex(/^\d+$/),
-        qty:z.string().regex(/^\d+$/),
-        price:z.string().regex(/^\d+$/),
+        leverage:z.string().regex(/^\d+$/).transform((l)=>BigInt(l)),
+        qty:z.string().regex(/^\d+$/).transform((q)=>BigInt(q)),
+        price:z.string().regex(/^\d+$/).transform((p)=>BigInt(p)),
         userId:z.string().min(1)
 
 })
@@ -77,12 +75,13 @@ app.post("/admin/market",async (req,res)=>{
                     makerRate:BigInt(marketDetails.makerRate),
                     mmr:BigInt(marketDetails.mmr)
 
-            }
+            },
+            select:{id:true}
         })
 
         console.log("market is created-",response);
 
-       const engineResponse =  responseManager.putRequest("CREATE_MARKET",{...marketDetails});
+       const engineResponse =  responseManager.putRequest({type:"CREATE_MARKET",payload:{marketId:response.id}});
 
        res.status(200).send("market added successfully");
     } catch (error) {
@@ -129,7 +128,7 @@ app.post("/signup", async (req, res) => {
         }
         const userId = newUser.userId ;
         //add user to the engine
-        responseManager.putRequest("CREATE_ORDER",{userId,collateral:{available:"0",locked:"0"}})
+        responseManager.putRequest({type:"CREATE_USER",payload:{userId}})
         return res.status(201).send({message:"user created", userId:newUser.userId});
     } catch (error) {
 
@@ -192,7 +191,7 @@ app.post("/order", async (req, res) => {
         // if(!userId) return  res.send("no user found");
         const payload = CreateOrderSchema.parse(req.body);
         const orderId = generateId();
-        const response = await responseManager.putRequest("CREATE_ORDER",{...payload,orderId})
+        const response = await responseManager.putRequest({type:"CREATE_ORDER",payload:{...payload,orderId}})
         
         return res.json({...response})
         
@@ -217,7 +216,7 @@ app.delete("/order", async (req, res) => {
             if(parsedOrder.error){
                 return res.status(400).json(parsedOrder.data)
             }
-            const response = await responseManager.putRequest("DELETE_ORDER",parsedOrder.data);
+            const response = await responseManager.putRequest({type:"DELETE_ORDER",payload:parsedOrder.data});
 
             return res.status(204).json(response);
         
@@ -229,16 +228,46 @@ app.delete("/order", async (req, res) => {
     }
     
 })
-app.get("/equity/available", async(req, res) => {
+app.get("/equity/available",AuthMiddleWare, async(req, res) => {
 
     try {
-        
+        const userId = req.body.userId as string;
+        const response = await responseManager.putRequest({type:"GET_EQUITY",payload:{userId}});
+        res.json({...response});
     } catch (error) {
         
     }
 })
-app.get("/positions/open/:marketId",AuthMiddleWare, async (req, res) => {});
-app.get("/positions/closed/:marketId",AuthMiddleWare,async (req, res) => {});
+app.get("/positions/open/:marketId",AuthMiddleWare, async (req, res) => {
+    
+    try {
+        const{ marketId} = req.params;
+        if(!marketId) return res.status(400).send({error:"plz send correct marketId"}) ;
+        if(typeof marketId != "string") return res.status(400).send({error:"plz send correct marketId"});
+        const userId = req.body.userId as string;
+        const response = await responseManager.putRequest({type:"GET_OPEN_POSITIONS",payload:{userId,marketId}});
+        res.json({...response});
+        
+    } catch (error) {
+        
+    }
+
+});
+app.get("/positions/closed/:marketId",AuthMiddleWare,async (req, res) => {
+    
+    try {
+                const{ marketId} = req.params;
+        const userId = req.body.userId as string;
+        if(!marketId) return res.status(400).send({error:"plz send correct marketId"}) ;
+        if(typeof marketId != "string") return res.status(400).send({error:"plz send correct marketId"});
+        const response = await responseManager.putRequest({type:"GET_CLOSED_POSITIONS",payload:{userId,marketId}});
+        res.json({...response});
+        
+    } catch (error) {
+        
+    }
+
+});
 app.get("/orders/open/:marketId",AuthMiddleWare,async (req, res) => {
      try {
         const userId = req.body.userId;

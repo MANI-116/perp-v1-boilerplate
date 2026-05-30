@@ -62,10 +62,18 @@ export class ResponseManager{
   
         }
     }
-    async putRequest(type:string,message:EngineRequest["payload"]){
+    async putRequest(request:EngineRequest){
         try {
             const corelationId = generateId();
-          const id = await this.sender.xAdd("engine-stream","*",{corelationId,type,payload:JSON.stringify(message)});
+            if(request.type==="CREATE_ORDER"){
+                const { leverage,price,qty} = request.payload;
+                let payload = {...request.payload,qty:qty.toString(),leverage:leverage.toString(),price:price.toString()}
+                const id = await this.sender.xAdd("engine-stream","*",{corelationId,type:request.type,payload:JSON.stringify(payload)});
+
+            }else{
+                const id = await this.sender.xAdd("engine-stream","*",{corelationId,type:request.type,payload:JSON.stringify(request.payload)});
+
+            }
         console.log("messsage is added to the queue")
         return new Promise<EngineResponse>((res,rej)=>{
             this.requestMap.set(corelationId,res);
