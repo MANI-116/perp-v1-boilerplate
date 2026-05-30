@@ -19,7 +19,7 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
                 qty:payload.qty.toString(),
                 price:payload.price.toString(),
                 filled:"0n",
-                state:"CLOSED"} }
+                state:"CANCELED"} }
     }
 
     if(market === undefined){
@@ -30,7 +30,7 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
                 qty:payload.qty.toString(),
                 price:payload.price.toString(),
                 filled:"0n",
-                state:"CLOSED"
+                state:"CANCELED"
             }};
     }
 
@@ -57,12 +57,12 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
                     qty:payload.qty.toString(),
                     price:payload.price.toString(),
                     filled:"0n",
-                    state:"CLOSED"} }
+                    state:"CANCELED"} }
         }
 
         //now we have the collateral needed to put the order in the book or execute it:
         //create order
-        const order = new Order(payload.orderId,payload.userId,payload.marketId,payload.qty,payload.side,payload.price,payload.leverage);
+        const order = new Order(payload.orderId,payload.userId,payload.marketId,payload.qty,payload.side,payload.price,payload.leverage,"LIMIT");
 
         const response =  matchOrder(user,order,market,orderBooks,users);
         return response;
@@ -82,7 +82,7 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
                     qty:payload.qty.toString(),
                     price:payload.price.toString(),
                     filled:"0n",
-                    state:"CLOSED"}};
+                    state:"CANCELED"}};
             
         }
           let totalLevels = payload.side === "SHORT"?orderBook.bidTree.getLength():orderBook.askTree.getLength();
@@ -95,7 +95,7 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
                 qty:payload.qty.toString(),
                 price:payload.price.toString(),
                 filled:"0n",
-                state:"CLOSED"}}
+                state:"CANCELED"}}
 
         const estimatedPrice = calculateEstimatedPrice(payload.qty,payload.side,orderBook);
         if(estimatedPrice === 0n) return  { 
@@ -107,7 +107,7 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
                     qty:payload.qty.toString(),
                     price:payload.price.toString(),
                     filled:"0n",
-                    state:"CLOSED"}};
+                    state:"CANCELED"}};
         if(estimatedPrice === undefined) return  { 
             event:"ORDER_REJECTED",
             payload:{
@@ -117,7 +117,7 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
                 qty:payload.qty.toString(),
                 price:payload.price.toString(),
                 filled:"0n",
-                state:"CLOSED"}};;
+                state:"CANCELED"}};;
           //first check the balances and lock collateral or initial margin from the leverage took and maintenance margin
         const positionSize = payload.qty*estimatedPrice;
         const initialMargin = positionSize/payload.leverage;
@@ -138,9 +138,9 @@ export  function matchingEngine(payload:PayloadOrder):EngineResponse{
                     qty:payload.qty.toString(),
                     price:payload.price.toString(),
                     filled:"0n",
-                    state:"CLOSED"}};
+                    state:"CANCELED"}};
         }
-        const order = new Order(payload.orderId,payload.userId,payload.marketId,payload.qty,payload.side,estimatedPrice,payload.leverage);
+        const order = new Order(payload.orderId,payload.userId,payload.marketId,payload.qty,payload.side,estimatedPrice,payload.leverage,"MARKET");
         const response = marketOrder(user,order,market,orderBooks,users);
         return response;
 

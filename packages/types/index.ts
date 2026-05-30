@@ -226,6 +226,10 @@ export class Position {
 
     }
 }
+
+   
+
+  
 export type OrderStatus = "FILLED"|"PARTIALLY_FILLED"|"CANCELED"|"OPEN"
 export type OrderSide = "SHORT" | "LONG"
 export class Order{
@@ -233,7 +237,7 @@ export class Order{
     public initialMargin:bigint;
     public filled:bigint = 0n;
     public status:OrderStatus = "OPEN"
-    constructor(public orderId:string,public userId:string,public assetId:string, public qty:bigint, public side:OrderSide , public price:bigint, public leverage:bigint){
+    constructor(public orderId:string,public userId:string,public assetId:string, public qty:bigint, public side:OrderSide , public price:bigint, public leverage:bigint,public type:"LIMIT"|"MARKET"){
         console.log("orderId-",this.orderId)
         if(this.orderId === "" || this.orderId === undefined) throw new Error("orderId is needed")
         this.initialMargin =(this.qty*this.price)/this.leverage 

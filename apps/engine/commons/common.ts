@@ -87,6 +87,7 @@ function applyTaxation(position:Position,qty:bigint,price:bigint,type:"taker"|"m
     }
     position.initialMargin -= tax;
     incrementExchangeBalance(tax);
+    return tax;
    
     
 }
@@ -148,8 +149,7 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
        updatePositions(sellerPosition,askOrder,qty,asker,orderBook);
      }
      
-     
-     applyTaxation(sellerPosition,qty,askOrder.price,"maker",market);
+     const makertax = applyTaxation(sellerPosition,qty,askOrder.price,"maker",market);
 
      if(bidPosition === undefined){
         //create new position     
@@ -161,7 +161,7 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
         updatePositions(bidPosition,bidOrder,qty,bidder,orderBook)
      }
     
-         applyTaxation(bidPosition,qty,askOrder.price,"maker",market);
+        const takerTax = applyTaxation(bidPosition,qty,askOrder.price,"maker",market);
     //position is filled completely -> then remove postion from the user and set its status to completed
     if(sellerPosition.qty === 0n){
         //position filled completely-->position status
@@ -190,5 +190,5 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
         bidPosition.side === "SHORT" ? orderBook.addShort(bidPosition):orderBook.addLong(bidPosition);
     }
   
-    return;
+    return {makertax,takerTax};
 }

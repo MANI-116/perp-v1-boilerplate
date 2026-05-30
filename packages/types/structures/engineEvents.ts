@@ -5,7 +5,7 @@
  * ORDER PARTIALLY FILLED EVENT
  */
 
-import type { EngineCreateOrder, OrderSide, Position } from ".."
+import type { EngineCreateOrder, OrderSide, Position,OrderStatus } from ".."
 
 
 type Direction = "1"|"-1"
@@ -65,7 +65,7 @@ export interface OrderFilled extends Order{
     matchedOrders:MatchOrder[]
 }
 
-type OrderState = "OPEN"|"FILLED"|"CLOSED"
+
 export interface OrderAccepted extends Order{
     message:string,
     timestamp:string,
@@ -75,7 +75,7 @@ export interface OrderAccepted extends Order{
 
 export interface Order{
     orderId:string,
-    state:OrderState,
+    state:OrderStatus,
     side:OrderSide,
     type:OrderType,
     qty:string,
