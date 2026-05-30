@@ -132,40 +132,40 @@ interface TransactResponse {
             transactAmount:string
         }
     }
-export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,orderBook:OrderBook,qty:bigint,market:Market){
+export function transact(taker:User,maker:User,takerOrder:Order,makerOrder:Order,orderBook:OrderBook,qty:bigint,market:Market){
      
-     let sellerPosition = asker.positions.filter((p)=>p.market.marketId === askOrder.assetId)[0];
-     let bidPosition = bidder.positions.filter((p)=>p.market.marketId === askOrder.assetId)[0];
+     let sellerPosition = maker.positions.filter((p)=>p.market.marketId === makerOrder.assetId)[0];
+     let bidPosition = taker.positions.filter((p)=>p.market.marketId === makerOrder.assetId)[0];
      
      if(sellerPosition === undefined){
         //create new position
-        sellerPosition = new Position(askOrder.userId,market,qty,askOrder.price,askOrder.side,askOrder.leverage);
+        sellerPosition = new Position(makerOrder.userId,market,qty,makerOrder.price,makerOrder.side,makerOrder.leverage);
         //ADDING POSITION TO THE SHORTS OR LONGS
         orderBook.addShort(sellerPosition);
-        asker.positions.push(sellerPosition);
-        askOrder.filled += qty;
+        maker.positions.push(sellerPosition);
+        makerOrder.filled += qty;
         
      }else{
-       updatePositions(sellerPosition,askOrder,qty,asker,orderBook);
+       updatePositions(sellerPosition,makerOrder,qty,maker,orderBook);
      }
      
-     const makertax = applyTaxation(sellerPosition,qty,askOrder.price,"maker",market);
+     const makertax = applyTaxation(sellerPosition,qty,makerOrder.price,"maker",market);
 
      if(bidPosition === undefined){
         //create new position     
-        bidPosition = new Position(bidOrder.userId,market,qty,bidOrder.price,bidOrder.side,bidOrder.leverage);
-        bidder.positions.push(bidPosition);
+        bidPosition = new Position(takerOrder.userId,market,qty,takerOrder.price,takerOrder.side,takerOrder.leverage);
+        taker.positions.push(bidPosition);
         orderBook.addLong(bidPosition);
-        bidOrder.filled += qty; 
+        takerOrder.filled += qty; 
      }else{
-        updatePositions(bidPosition,bidOrder,qty,bidder,orderBook)
+        updatePositions(bidPosition,takerOrder,qty,taker,orderBook)
      }
     
-        const takerTax = applyTaxation(bidPosition,qty,askOrder.price,"maker",market);
+        const takerTax = applyTaxation(bidPosition,qty,makerOrder.price,"maker",market);
     //position is filled completely -> then remove postion from the user and set its status to completed
     if(sellerPosition.qty === 0n){
         //position filled completely-->position status
-        asker.positions = asker.positions.filter((p)=>{return !(p.qty === 0n)});
+        maker.positions = maker.positions.filter((p)=>{return !(p.qty === 0n)});
         sellerPosition.side === "SHORT" ? orderBook.removeShort(sellerPosition):orderBook.removeLong(sellerPosition);
         
         
@@ -180,7 +180,7 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
         
 
     if(bidPosition.qty === 0n){
-        bidder.positions = bidder.positions.filter((p)=> !(p.qty===0n));
+        taker.positions = taker.positions.filter((p)=> !(p.qty===0n));
         bidPosition.side === "SHORT" ? orderBook.removeShort(bidPosition):orderBook.removeLong(bidPosition);
         
     }else{

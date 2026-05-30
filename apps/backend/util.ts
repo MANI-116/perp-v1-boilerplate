@@ -70,6 +70,11 @@ export class ResponseManager{
                 let payload = {...request.payload,qty:qty.toString(),leverage:leverage.toString(),price:price.toString()}
                 const id = await this.sender.xAdd("engine-stream","*",{corelationId,type:request.type,payload:JSON.stringify(payload)});
 
+            }else if(request.type === "RAMP_USER"){
+               const { userId,credit} = request.payload;
+               const payload = {userId,credit:credit.toString()};
+                const id = await this.sender.xAdd("engine-stream","*",{corelationId,type:request.type,payload:JSON.stringify(payload)});
+ 
             }else{
                 const id = await this.sender.xAdd("engine-stream","*",{corelationId,type:request.type,payload:JSON.stringify(request.payload)});
 

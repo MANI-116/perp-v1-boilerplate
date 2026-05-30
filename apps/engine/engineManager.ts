@@ -1,6 +1,7 @@
 import type { EngineDeleteOrder, EngineMarket, EngineRampUser, EngineResponse, EngineUser, User } from "@repo/types";
 import { matchingEngine } from "./matchingEnigne";
-import { addUser, addMarket, orderBooks, users } from "./sharedResourcesManager";
+import { addUser, addMarket, orderBooks, users,markets } from "./sharedResourcesManager";
+import { liquidationEngine } from "./liquidationEngine";
 
 function createUser(user:User):EngineUser{
    return addUser(user)
@@ -32,6 +33,36 @@ function rampUser({userId,credit}:{userId:string,credit:bigint}):EngineRampUser{
     return { totalBalance :user.collateral.available.toString()};
 }
 
+
+function getEquity(userId:string){
+
+    const user = users.filter((u)=>u.userId === userId)[0];
+    if(!user) return { success:false, error:"user not found"};
+    const positions = user.positions;
+    const unrealizedPnL = positions.reduce((sum,pos)=>{
+        return sum += pos.unrealizedPnL
+    },0n);
+
+    const equity =(user.collateral.locked +user.collateral.available+unrealizedPnL).toString();
+
+    return { success:true,data:{equity}}
+}
+
+function getOpenPositions(userId:string,marketId:string){
+
+    const user = users.filter((u)=>u.userId === userId)[0];
+    if(!user) return { success:false,error:"user not found"};
+    const positions = user.positions.filter((p)=>p.market.marketId === marketId);;
+    return {success:true,data:{positions}};
+}
+
+function getClosedPositions(userId:string,marketId:string){
+      const user = users.filter((u)=>u.userId === userId )[0];
+    if(!user) return { success:false,error:"user not found"};
+    const positions = user.closedPositions.filter((p)=>p.market.marketId === marketId);
+    return {success:true,data:{positions}};
+    
+}
 
 
 
@@ -85,7 +116,21 @@ export function engineManager(request:any):EngineResponse|null{
             const response = getEquity(request.payload.userId);
             return {event:"GET_EQUITY",payload:response};
         }
-            break;
+        case "UPDATE_MARKPRICE":{
+            const { symbol,markPrice } =request.payload;
+            const market = markets.filter((m)=>m.symbol === symbol)[0];
+            if(market){ 
+                console.log("starting liquidation engine-",symbol);
+                liquidationEngine({marketId:market.marketId,markPrice});
+            }
+        }
+        break;
+        case "GET_DEPTH":{
+            const {marketId} = request.payload;
+            const response = getDepth(marketId);
+            return {event:"GET_DEPTH",payload:response};
+        }
+        break;
     }
     throw new Error("no request type matched");
 
@@ -93,32 +138,21 @@ export function engineManager(request:any):EngineResponse|null{
 }
 
 
-function getEquity(userId:string){
+function getDepth(marketId:string){
 
-    const user = users.filter((u)=>u.userId === userId)[0];
-    if(!user) return { success:false, error:"user not found"};
-    const positions = user.positions;
-    const unrealizedPnL = positions.reduce((sum,pos)=>{
-        return sum += pos.unrealizedPnL
-    },0n);
+    const orderBook = orderBooks.get(marketId);
+    if(!orderBook){
+        return { success:false,error:"no orderbook found"};
+    }
 
-    const equity =(user.collateral.locked +user.collateral.available+unrealizedPnL).toString();
+    const bids = [...orderBook.bids.entries()].sort((a,b)=>{if(a[0]<b[0]){return -1}else if(a[0] > b[0]){ return 1} return 0;}).map((e)=>{
+        return [e[0].toString(),e[1].totalQty.toString()]
+    });
 
-    return { success:true,data:{equity}}
+    const asks = [...orderBook.asks.entries()].sort((a,b)=>{if(a[0]<b[0]){return -1}else if(a[0] > b[0]){ return 1} return 0;}).map((e)=>{
+        return [e[0].toString(),e[1].totalQty.toString()]
+    })
+
+    return { success:true, data:{asks,bids}}
 }
 
-function getOpenPositions(userId:string,marketId:string){
-
-    const user = users.filter((u)=>u.userId === userId)[0];
-    if(!user) return { success:false,error:"user not found"};
-    const positions = user.positions.filter((p)=>p.market.marketId === marketId);;
-    return {success:true,data:{positions}};
-}
-
-function getClosedPositions(userId:string,marketId:string){
-      const user = users.filter((u)=>u.userId === userId )[0];
-    if(!user) return { success:false,error:"user not found"};
-    const positions = user.closedPositions.filter((p)=>p.market.marketId === marketId);
-    return {success:true,data:{positions}};
-    
-}

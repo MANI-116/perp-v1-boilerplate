@@ -1,7 +1,7 @@
 import  { type OrderBook, type Market,User } from "@repo/types";
 
 export const orderBooks = new Map<string,OrderBook>();
-export const markets:Market[] = [{marketId:"market-001",markPrice:1000n,mmr:5n,takerRate:5n,makerRate:5n,taxationScale:3n}];
+export const markets:Market[] = [{marketId:"market-001",markPrice:1000n,mmr:5n,takerRate:5n,makerRate:5n,taxationScale:3n,symbol:"SOLUSDT"}];
 export const users:User[] = [];
 export let EXCHANGE_BALANCE=1000n;
 
@@ -37,7 +37,7 @@ export function addMarket(marketId:string){
     const dupMarket = markets.filter((m)=>m.marketId===marketId)[0];
 if(dupMarket) return { error:"conflict", message:"market with sameID found"};
 
-markets.push({marketId,markPrice:0n,mmr:5n,takerRate:5n,makerRate:2n,taxationScale:3n});
+markets.push({marketId,markPrice:0n,mmr:5n,takerRate:5n,makerRate:2n,taxationScale:3n,symbol:"SOLUSDT"});
 return { message:"market is added"};
 
 }

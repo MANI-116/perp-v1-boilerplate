@@ -1,4 +1,4 @@
-import express, {response, type Request} from "express";
+import express, { type Request} from "express";
 import{z, ZodError} from "zod"
 import jwt,{type JwtPayload} from "jsonwebtoken"
 import cookieParser  from "cookie-parser"
@@ -60,6 +60,14 @@ const createMarketSchema = z.object({
     mmr:z.string()
 })
 
+const delteOrderSchema = z.object({
+    orderId:z.string().min(2),
+    marketId:z.string().min(2)
+})
+
+const rampUserSchema = z.object({
+    credit:z.string().regex(/^\d+$/).transform((p)=>BigInt(p))
+})
 app.post("/admin/market",async (req,res)=>{
 
     try {
@@ -180,8 +188,16 @@ app.post("/signin",async (req, res) => {
     }
     
 })
-app.post("/onramp", AuthMiddleWare,(req:AuthRequest, res) => {
-    console.log("ramping the users balance");
+app.post("/onramp", AuthMiddleWare,async(req:AuthRequest, res) => {
+    try {
+        const userId = req.body.userId as string;
+        const parsedData = rampUserSchema.safeParse(req.body);
+        if(!parsedData.success) return res.status(400).json(parsedData.error);
+        const response = await responseManager.putRequest({type:"RAMP_USER",payload:{userId,credit:parsedData.data.credit}})
+        return res.json(response);
+    } catch (error) {
+        
+    }
     
 })
 app.post("/order", async (req, res) => {
@@ -205,10 +221,7 @@ app.post("/order", async (req, res) => {
     }
 })
 
-const delteOrderSchema = z.object({
-    orderId:z.string().min(2),
-    marketId:z.string().min(2)
-})
+
 app.delete("/order", async (req, res) => {
 
     try {
@@ -233,7 +246,7 @@ app.get("/equity/available",AuthMiddleWare, async(req, res) => {
     try {
         const userId = req.body.userId as string;
         const response = await responseManager.putRequest({type:"GET_EQUITY",payload:{userId}});
-        res.json({...response});
+        return res.json({...response});
     } catch (error) {
         
     }
@@ -330,7 +343,17 @@ try {
 
 });
 
-
+app.get("/depth/:marketId",AuthMiddleWare,async (req,res)=>{
+    try {
+        const {marketId} = req.params;
+        if(typeof marketId != "string") return res.status(400).send({error:"plz send correct marketId"})
+        const response = await responseManager.putRequest({type:"GET_DEPTH",payload:{marketId}})
+        console.log("response from the getDepth",response);
+        return res.status(400).json({...response});
+    } catch (error) {
+        
+    }
+})
 app.listen(process.env.PORT,()=>{
     console.log(`server is running on the port-${process.env.PORT}`);
 })

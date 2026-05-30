@@ -114,8 +114,15 @@ export interface EventMap{
     "DELETE_ORDER":EngineDeleteOrder,
     "GET_OPEN_POSITIONS":OpenPositions,
     "GET_CLOSED_POSITIONS":ClosedPositions,
-    "GET_EQUITY":GetEquity
+    "GET_EQUITY":GetEquity,
+    "GET_DEPTH":GetDepth
 
+}
+
+interface GetDepth{
+    success:boolean,
+    error?:string,
+    data?:{asks:string[][],bids:string[][]}
 }
 
 interface ClosedPositions{

@@ -34,10 +34,14 @@ interface EngineRequestMap{
         "DELETE_ORDER":DeleteOrder,
         "GET_OPEN_POSITIONS":GetPositions,
         "GET_CLOSED_POSITIONS":GetPositions,
-        "GET_EQUITY":GetEquity
+        "GET_EQUITY":GetEquity,
+        "GET_DEPTH":GetDepth
 }
 interface CreateUser{
     userId:string,
+}
+interface GetDepth{
+    marketId:string
 }
 
 interface CreateMarket{
@@ -120,6 +124,7 @@ export class User {
 }
 
 export interface Market{
+    symbol:string,
     markPrice:bigint,
     marketId:string,
     mmr:bigint,
