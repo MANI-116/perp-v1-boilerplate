@@ -15,11 +15,12 @@ function createMarket(marketId:string):EngineMarket{
 function deleteOrder(orderId:string,assetId:string):EngineDeleteOrder{
     const orderBook = orderBooks.get(assetId);
     if(!orderBook){
-        return {error:"orderbook not found", orderId};
+        return {success:false,error:"orderbook not found", orderId};
     }
 
-    orderBook.deleteOrder(orderId);
-    return { message:"order deleted", orderId};
+
+    const response = orderBook.deleteOrder(orderId);
+    return { ...response, orderId};
 
 }
 

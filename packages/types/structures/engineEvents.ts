@@ -24,9 +24,14 @@ export interface CreateUser{
 }
 
 export interface EngineDeleteOrder{
+    success:boolean,
     error?:string,
     message?:string,
     orderId:string,
+    updates?:{
+        asks:string[][],
+        bids:string[][]
+    }
 
 }
 
@@ -62,7 +67,8 @@ export interface MatchOrder{
 export interface OrderFilled extends Order{
     availbleBalance:string,
     tax:string
-    matchedOrders:MatchOrder[]
+    matchedOrders:MatchOrder[],
+    updates:{asks:string[][],bids:string[][]}
 }
 
 
@@ -70,6 +76,10 @@ export interface OrderAccepted extends Order{
     message:string,
     timestamp:string,
     totalLocked:string,
+    updates:{
+        asks:string[][],
+        bids:string[][]
+    }
     
 }
 

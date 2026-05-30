@@ -15,6 +15,11 @@ export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<s
     if(opSidelevelData === undefined){
         //no opposite price level present for the asset ,so put order in  orderbook
         order.side === "LONG"?orderBook.addBidOrder(order):orderBook.addAskOrder(order);
+        let updates={
+            bids:order.side === "LONG"?[[price.toString(),qty.toString()]]:[[]],
+            asks:order.side === "SHORT"?[[price.toString(),qty.toString()]]:[[]]
+
+        }
         return {
             event:"ORDER_ACCEPTED",
             payload:{
@@ -28,7 +33,10 @@ export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<s
                 orderId:order.orderId,
                 message:"order placed fully in the book",
                 timestamp:Date.now().toString(),
-                totalLocked:user.collateral.locked.toString()}};
+                totalLocked:user.collateral.locked.toString(),
+                updates
+                
+            }};
     }
     
     //ask level avialable ---> we can match the order and execute the order --->add to position or open new position
@@ -36,6 +44,9 @@ export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<s
     //this will consume the availble qty in the market at that level
     let takerTax = 0n;
     const matchedOrders:MatchOrder[]=[];
+    let takerUpdates:string[][] = [[]];
+    let makerUpdates:string[][] = [[]];
+
     for(let index = 0; index < ordersLength;index++){
         const requiredQty = order.qty - order.filled;
         const matchedOrder = opSidelevelData.list.getFirstOrder().value;
@@ -81,6 +92,14 @@ export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<s
             matchedOrder.side === "SHORT"?orderBook.removeAskOrder(matchedOrder):orderBook.removeBuyOrder(matchedOrder);
         }
         if(order.filled === order.qty){
+
+            //changes happend in the oppist side
+            let updates={
+            bids:matchedOrder.side === "LONG"?[[price.toString(),opSidelevelData.totalQty.toString()]]:[[]],
+            asks:matchedOrder.side=== "SHORT"?[[price.toString(),opSidelevelData.totalQty.toString()]]:[[]]
+
+        }
+            
             return { event:"ORDER_FILLED",
                     payload:{
                         tax:takerTax.toString(),
@@ -93,7 +112,11 @@ export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<s
                         marketId:order.assetId,
                         orderId:order.orderId,
                         matchedOrders,
-                        availbleBalance:user.collateral.available.toString()}}
+                        availbleBalance:user.collateral.available.toString(),
+                        updates
+                    },
+
+                    }
         }
         
 
@@ -102,6 +125,28 @@ export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<s
     if(order.filled != order.qty){
         //place in the order book:
         order.side === "LONG"?orderBook.addBidOrder(order):orderBook.addAskOrder(order);
+
+    }
+
+    //now we have maker updates and taker updates-->is it really, we matched opside sum executed--> opside level become 0 and order qty raise in taker account
+    //asks and bids for updates
+    //taker -> asks and bids[[price,qty]]
+    //maker -> asks and bids [[price,0]]
+    let bids:string[][]=[];
+    let asks:string[][]=[];
+    if(order.side === "SHORT"){
+        //taker have some ask qty:
+        const leveldata = orderBook.asks.get(order.price)!;
+        const qty = leveldata.totalQty.toString();
+        asks.push([price.toString(),qty]);
+        bids.push([price.toString(),opSidelevelData.totalQty.toString()]);
+
+    }else{
+        
+        const leveldata = orderBook.bids.get(order.price)!;
+        const qty = leveldata.totalQty.toString();
+        bids.push([price.toString(),qty]);
+        asks.push([price.toString(),opSidelevelData.totalQty.toString()]);
 
     }
     return { event:"ORDER_FILLED_PARTIALLY",
@@ -113,5 +158,9 @@ export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<s
             state:status,userId,filled:filled.toString(),
             side ,marketId:order.assetId,
             orderId:order.orderId,
+            updates:{
+                asks,
+                bids
+            },
             matchedOrders,availbleBalance:user.collateral.available.toString()}};
 }

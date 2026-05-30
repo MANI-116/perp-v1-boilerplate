@@ -11,6 +11,8 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
         let totalLevels = order.side === "SHORT"?orderBook.bidTree.getLength():orderBook.askTree.getLength()
         const matchedOrders:MatchOrder[]=[];
         let takertax = 0n;
+        let bids:string[][]=[];
+        let asks:string[][]=[];
         for(let i =0; i< totalLevels;i++ ){
             //get the pricelevel from opposite side
             const level = order.side === "SHORT"?orderBook.bidTree.getTop():orderBook.askTree.getMinAsk();
@@ -31,7 +33,7 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
             }
             let opSidelevelData= order.side === "LONG"?orderBook.asks.get(level):orderBook.bids.get(level);
             if(opSidelevelData === undefined){
-                //no opposite price level present for the asset ,so put order in  orderbook
+                //no opposite price level present for the asset ,so reject he market Order
                 order.side === "LONG"?orderBook.addBidOrder(order):orderBook.addAskOrder(order);
                 return {
                     event:"ORDER_REJECTED",
@@ -44,7 +46,7 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
                         side ,
                         marketId:order.assetId,
                         orderId:order.orderId,
-                        error:"order is placed in the orderBook",
+                        error:"no opposit orders",
                         timestamp:Date.now().toString()}};
             }
             
@@ -98,6 +100,10 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
                     matchedOrder.side === "SHORT"?orderBook.removeAskOrder(matchedOrder):orderBook.removeBuyOrder(matchedOrder);
                 }
                 if(order.filled === order.qty){
+                        let updates={
+                                        bids:matchedOrder.side === "LONG"?[[price.toString(),opSidelevelData.totalQty.toString()]]:[[]],
+                                        asks:matchedOrder.side=== "SHORT"?[[price.toString(),opSidelevelData.totalQty.toString()]]:[[]]
+                                    }
                     return { 
                         event:"ORDER_FILLED" ,
                          payload:{
@@ -112,10 +118,18 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
                             filled:order.qty.toString(),
                             price:order.price.toString(),
                             matchedOrders,
+                            updates,
                             availbleBalance:user.collateral.available.toString()}}
                 }
             
         }
+          if(order.side === "SHORT"){
+        bids.push([price.toString(),opSidelevelData.totalQty.toString()]);
+
+    }else{
+        asks.push([price.toString(),opSidelevelData.totalQty.toString()]);
+
+    }
 
                             //if level is completed and qty not filled yet next level will pickup automatically
                             //else if filled we are returning the data of filledqty
@@ -138,6 +152,10 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
                 filled:order.qty.toString(),
                 price:order.price.toString(),
                 matchedOrders,
-                availbleBalance:user.collateral.available.toString()}}
+                availbleBalance:user.collateral.available.toString(),
+                updates:{
+                    asks,bids
+                }
+            }}
 
 }

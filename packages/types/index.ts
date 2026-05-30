@@ -601,12 +601,18 @@ export class OrderBook{
 
     deleteOrder(orderId:string){
         const node =  this.ordersRef.get(orderId);
-        if(!node) return { error:"did not find the reference"};
+        if(!node) return { success:false,error:"did not find the reference"};
         const order = node.value;
         const side = order.side;
         const priceLevel = order.price;
-        const levelData = side === "SHORT" ? this.asks.get(priceLevel):this.bids.get(priceLevel);
-        levelData?.removeNode(node);
+        const levelData = side === "SHORT" ? this.asks.get(priceLevel)!:this.bids.get(priceLevel)!;
+        levelData.removeNode(node);
+         let updates={
+            bids:order.side === "LONG"?[[order.price.toString(),levelData.totalQty.toString()]]:[[]],
+            asks:order.side === "SHORT"?[[order.price.toString(),levelData.totalQty.toString()]]:[[]]
+
+        }
+        return {success:true, updates}
         
     }
     addShortLiquidationPrice(price:bigint){
