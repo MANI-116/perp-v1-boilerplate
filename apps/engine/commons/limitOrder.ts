@@ -1,6 +1,6 @@
-import { User, Order, type Market, OrderBook,Fill, type EngineResponse,type MatchOrder} from "@repo/types"
+import { User, Order, type Market, OrderBook, type EngineResponse,type MatchOrder} from "@repo/types"
 import { transact } from "./common";
-export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<string,OrderBook>,users:User[],fills:Fill[]):EngineResponse{
+export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<string,OrderBook>,users:User[]):EngineResponse{
 
     let orderBook = orderBooks.get(order.assetId);
     if(orderBook === undefined){
@@ -32,10 +32,10 @@ export  function matchOrder(user:User,order:Order,market:Market,orderBooks:Map<s
         }
         //executing the order
         if(requiredQty <= availablleQty){
-            transact(user,matchedUser,order,matchedOrder, orderBook,requiredQty,market,fills);
+            transact(user,matchedUser,order,matchedOrder, orderBook,requiredQty,market);
 
         }else{
-            transact(user,matchedUser,order,matchedOrder,orderBook,availablleQty,market,fills);
+            transact(user,matchedUser,order,matchedOrder,orderBook,availablleQty,market);
         }
         matchedOrders.push({orderId:matchedOrder.orderId,qtyTransfered:matchedOrder.filled.toString(),timestamp:Date.now().toString(),availbleBalance:matchedUser.collateral.available.toString()})
         if(matchedOrder.filled === matchedOrder.qty ){

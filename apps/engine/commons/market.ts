@@ -1,6 +1,7 @@
 import { Order, User, type Market,OrderBook, Fill,type EngineResponse, type MatchOrder} from "@repo/types"
 import { transact } from "./common";
-export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<string,OrderBook>,users:User[],fills:Fill[]):EngineResponse{
+import { EXCHANGE_BALANCE } from "../sharedResourcesManager";
+export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<string,OrderBook>,users:User[]):EngineResponse{
 
         let orderBook = orderBooks.get(order.assetId);
         if(orderBook === undefined){
@@ -36,10 +37,10 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
                 }
                 //executing the order
                 if(requiredQty <= availablleQty){
-                    transact(user,matchedUser,order,matchedOrder, orderBook,requiredQty,market,fills);
+                    transact(user,matchedUser,order,matchedOrder, orderBook,requiredQty,market);
     
                 }else{
-                    transact(user,matchedUser,order,matchedOrder,orderBook,availablleQty,market,fills);
+                    transact(user,matchedUser,order,matchedOrder,orderBook,availablleQty,market);
                 }
                 
                  matchedOrders.push({orderId:matchedOrder.orderId,qtyTransfered:matchedOrder.filled.toString(),timestamp:Date.now().toString(),availbleBalance:matchedUser.collateral.available.toString()})
@@ -49,7 +50,7 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
                     matchedOrder.side === "SHORT"?orderBook.removeAskOrder(matchedOrder):orderBook.removeBuyOrder(matchedOrder);
                             }
                 if(order.filled === order.qty){
-                    return { event:"ORDER_FILLED" , payload:{orderId:order.orderId,filledQty:order.qty.toString(),price:order.price.toString(),matchedOrders,availbleBalance:user.collateral.available.toString()}}
+                    return { event:"ORDER_FILLED" , payload:{orderId:order.orderId,filled:order.qty.toString(),price:order.price.toString(),matchedOrders,availbleBalance:user.collateral.available.toString()}}
                 }
             
         }
@@ -61,6 +62,6 @@ export function marketOrder(user:User,order:Order,market:Market,orderBooks:Map<s
 
 
         //we are out of liquidity in the market so we makr the order as FILLED but filledQty would be what ever we matched
-        return { event:"ORDER_FILLED_PARTIALLY", payload:{orderId:order.orderId,filledQty:order.qty.toString(),price:order.price.toString(),matchedOrders,availbleBalance:user.collateral.available.toString()}}
+        return { event:"ORDER_FILLED_PARTIALLY", payload:{orderId:order.orderId,filled:order.qty.toString(),price:order.price.toString(),matchedOrders,availbleBalance:user.collateral.available.toString()}}
 
 }

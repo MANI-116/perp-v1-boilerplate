@@ -1,4 +1,5 @@
 import { User, OrderBook,Position,Fill,Order,type Market, type OrderSide } from "@repo/types"
+import { EXCHANGE_BALANCE, incrementExchangeBalance } from "../sharedResourcesManager";
 
 function emergencyLiquidation(position:Position){
 
@@ -76,7 +77,7 @@ export function PartialFillPosition(position:Position,order:Order,user:User,qty:
 
 }
 
-function applyTaxation(position:Position,qty:bigint,price:bigint,type:"taker"|"maker",market:Market,exchangeBalance:bigint){
+function applyTaxation(position:Position,qty:bigint,price:bigint,type:"taker"|"maker",market:Market){
     
     let taxRate = type === "taker" ? market.takerRate : market.makerRate;
     const tax = (qty * price * taxRate)/market.taxationScale;
@@ -85,7 +86,8 @@ function applyTaxation(position:Position,qty:bigint,price:bigint,type:"taker"|"m
         emergencyLiquidation(position);
     }
     position.initialMargin -= tax;
-    exchangeBalance += tax;
+    incrementExchangeBalance(tax);
+   
     
 }
 
@@ -129,8 +131,8 @@ interface TransactResponse {
             transactAmount:string
         }
     }
-export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,orderBook:OrderBook,qty:bigint,market:Market,exchangeBalance:bigint){
-
+export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,orderBook:OrderBook,qty:bigint,market:Market){
+     
      let sellerPosition = asker.positions.filter((p)=>p.market.marketId === askOrder.assetId)[0];
      let bidPosition = bidder.positions.filter((p)=>p.market.marketId === askOrder.assetId)[0];
      
@@ -147,7 +149,7 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
      }
      
      
-     applyTaxation(sellerPosition,qty,askOrder.price,"maker",market,exchangeBalance);
+     applyTaxation(sellerPosition,qty,askOrder.price,"maker",market);
 
      if(bidPosition === undefined){
         //create new position     
@@ -159,7 +161,7 @@ export function transact(bidder:User,asker:User,bidOrder:Order,askOrder:Order,or
         updatePositions(bidPosition,bidOrder,qty,bidder,orderBook)
      }
     
-         applyTaxation(bidPosition,qty,askOrder.price,"maker",market,exchangeBalance);
+         applyTaxation(bidPosition,qty,askOrder.price,"maker",market);
     //position is filled completely -> then remove postion from the user and set its status to completed
     if(sellerPosition.qty === 0n){
         //position filled completely-->position status
